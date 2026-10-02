@@ -217,6 +217,10 @@ function getAudioContext() {
   return _sharedAudioCtx;
 }
 
+const _pageLoadTimestamp = Date.now();
+let _isAudioArmed = false;
+let _silentOsc = null;
+
 function getMyStudentId() {
   return localStorage.getItem('myStudentId') || sessionStorage.getItem('myStudentId');
 }
@@ -241,18 +245,61 @@ function getAlarmAudioElement() {
   return el;
 }
 
+// Arm audio on first touch/click so mobile browsers keep media session active
+function armAudioPlayback() {
+  if (_isAudioArmed) return;
+
+  const audioEl = getAlarmAudioElement();
+  if (audioEl) {
+    audioEl.volume = 0.001;
+    audioEl.play().then(() => {
+      _isAudioArmed = true;
+      const box = document.getElementById('soundArmBox');
+      if (box) {
+        box.innerHTML = `
+          <span style="font-size:1.4rem;">✅</span>
+          <div style="flex:1;">
+            <strong style="color:#2ecc71;font-size:0.9rem;display:block;">Sound Alert is Active</strong>
+            <span style="color:var(--text-secondary);font-size:0.78rem;">Your alarm will sound when called.</span>
+          </div>
+        `;
+        box.style.borderColor = 'rgba(46,204,113,0.5)';
+        box.style.background = 'rgba(46,204,113,0.08)';
+      }
+    }).catch(e => {
+      console.warn('Arm audio pending user tap:', e);
+    });
+  }
+
+  try {
+    const ctx = getAudioContext();
+    if (ctx) {
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      if (!_silentOsc) {
+        _silentOsc = ctx.createOscillator();
+        const silentGain = ctx.createGain();
+        silentGain.gain.value = 0.0001;
+        _silentOsc.connect(silentGain);
+        silentGain.connect(ctx.destination);
+        _silentOsc.start(0);
+      }
+    }
+  } catch(e) {}
+}
+
 function playPhoneRingtone() {
   stopRingSound();
 
-  // 1. Play HTML5 Audio element (most reliable for mobile devices and background audio)
+  // 1. Play HTML5 Audio element at full volume
   try {
     const audioEl = getAlarmAudioElement();
     if (audioEl) {
+      audioEl.volume = 1.0;
       audioEl.currentTime = 0;
-      const playPromise = audioEl.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(e => {
-          console.warn('HTML5 audio play blocked/prevented:', e);
+      const p = audioEl.play();
+      if (p !== undefined) {
+        p.catch(e => {
+          console.warn('HTML5 audio play blocked:', e);
         });
       }
     }
@@ -260,7 +307,7 @@ function playPhoneRingtone() {
     console.warn('HTML5 audio error:', e);
   }
 
-  // 2. Play Web Audio API synthesized tone as concurrent second audio channel
+  // 2. Play Web Audio API synthesized tone concurrently
   try {
     const ctx = getAudioContext();
     if (ctx) {
@@ -299,8 +346,8 @@ function playPhoneRingtone() {
             gain.connect(curCtx.destination);
 
             gain.gain.setValueAtTime(0, t);
-            gain.gain.linearRampToValueAtTime(0.45, t + 0.015);
-            gain.gain.setValueAtTime(0.45, t + 0.065);
+            gain.gain.linearRampToValueAtTime(0.5, t + 0.015);
+            gain.gain.setValueAtTime(0.5, t + 0.065);
             gain.gain.linearRampToValueAtTime(0, t + 0.08);
 
             osc.start(t);
@@ -320,7 +367,7 @@ function playPhoneRingtone() {
     console.warn('Web Audio error:', e);
   }
 
-  // 3. Vibration pattern
+  // 3. Mobile Vibration
   if ('vibrate' in navigator) {
     try { navigator.vibrate([100, 50, 100, 50, 100, 50, 100, 500]); } catch(e) {}
   }
@@ -338,6 +385,7 @@ function stopRingSound() {
     if (audioEl) {
       audioEl.pause();
       audioEl.currentTime = 0;
+      audioEl.volume = 0.001;
     }
   } catch(e) {}
   if ('vibrate' in navigator) {
@@ -347,7 +395,7 @@ function stopRingSound() {
 }
 
 function testAlarmSound() {
-  unlockAudioOnInteraction();
+  armAudioPlayback();
   playPhoneRingtone();
   setTimeout(() => {
     stopRingSound();
@@ -356,13 +404,21 @@ function testAlarmSound() {
 
 function handleIncomingCall(call) {
   if (!call || !call.studentId) return;
-  const myId = getMyStudentId();
-  if (myId !== call.studentId) return;
 
-  // Don't trigger if this exact call nonce was already processed
+  // 1. DO NOT play sound for calls sent BEFORE this page was loaded!
+  if (call.timestamp && call.timestamp < _pageLoadTimestamp - 2000) {
+    console.log('Skipping previous call from before page load');
+    return;
+  }
+
+  // 2. Check if this call is meant for the student on this device
+  const myId = getMyStudentId();
+  const myStudent = _students.find(s => s.id === myId || (myId && s.universityId === myId));
+  const isForMe = (myId === call.studentId) || (myStudent && myStudent.id === call.studentId);
+  if (!isForMe) return;
+
+  // 3. Don't trigger if this exact call nonce was already processed
   if (call.nonce && call.nonce === _lastHandledCallNonce) return;
-  // Ignore calls older than 3 minutes
-  if (call.timestamp && Date.now() - call.timestamp > 180000) return;
   _lastHandledCallNonce = call.nonce;
 
   // Show alert modal on student's screen
@@ -392,35 +448,8 @@ function handleIncomingCall(call) {
 
 // Unlock audio on mobile interaction
 function unlockAudioOnInteraction() {
-  const unlock = () => {
-    try {
-      const audioEl = getAlarmAudioElement();
-      if (audioEl) {
-        audioEl.play().then(() => {
-          audioEl.pause();
-          audioEl.currentTime = 0;
-        }).catch(() => {});
-      }
-    } catch(e) {}
-
-    try {
-      const ctx = getAudioContext();
-      if (ctx) {
-        if (ctx.state === 'suspended') {
-          ctx.resume().catch(() => {});
-        }
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        gain.gain.value = 0.0001;
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(0);
-        osc.stop(ctx.currentTime + 0.05);
-      }
-    } catch(e) {}
-  };
   ['touchstart', 'touchend', 'click', 'pointerdown', 'keydown'].forEach(evt => {
-    document.addEventListener(evt, unlock, { passive: true });
+    document.addEventListener(evt, armAudioPlayback, { passive: true });
   });
 }
 

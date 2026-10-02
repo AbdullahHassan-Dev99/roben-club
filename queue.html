@@ -46,7 +46,16 @@
             <div class="ahead-sub" id="aheadSub">Please stay nearby and be ready when your turn arrives.</div>
           </div>
         </div>
-        <div style="margin-top:12px;text-align:right;">
+        <!-- Audio arming card for mobile browsers -->
+        <div class="sound-arm-box" id="soundArmBox" onclick="armAudioPlayback()" style="margin-top:14px;background:rgba(245,197,24,0.1);border:1.5px solid rgba(245,197,24,0.4);border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;">
+          <span style="font-size:1.4rem;">🔔</span>
+          <div style="flex:1;">
+            <strong style="color:var(--gold);font-size:0.9rem;display:block;">Tap anywhere to activate sound alert</strong>
+            <span style="color:var(--text-secondary);font-size:0.78rem;">Keeps audio armed so your alarm sounds when called.</span>
+          </div>
+          <button type="button" class="btn btn-sm btn-primary" style="font-size:0.75rem;padding:4px 10px;">Activate</button>
+        </div>
+        <div style="margin-top:10px;text-align:right;">
           <button type="button" class="btn btn-sm btn-ghost" onclick="testAlarmSound()" style="font-size:0.8rem;border-color:rgba(255,255,255,0.2);">🔊 Test Alarm Sound on this Phone</button>
         </div>
       </div>
