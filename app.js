@@ -231,7 +231,6 @@ function getAudioContext() {
   return _sharedAudioCtx;
 }
 
-const _pageLoadTimestamp = Date.now();
 let _isAudioArmed = false;
 
 function getMyStudentId() {
@@ -795,7 +794,6 @@ function clearError(id) {
 // =========================================
 // QUEUE PAGE
 // =========================================
-let prevCurrentId = null;
 let myStudentId   = null;
 let soundMuted    = false;
 
@@ -845,10 +843,7 @@ function initQueuePage() {
   // Real-time listeners
   listenSlots(() => renderQueue());
   listenStudents(() => renderQueue());
-  listenCurrent(newId => {
-    prevCurrentId = newId;
-    renderQueue();
-  });
+  listenCurrent(() => renderQueue());
   listenCallAlert(handleIncomingCall);
 }
 
@@ -1037,30 +1032,6 @@ function updateQueueStats() {
   if (!el) return;
   const waiting = _students.filter(s => s.status === 'waiting').length;
   el.textContent = `${waiting} waiting • ${_students.length} total`;
-}
-
-function triggerMyTurnAlert(student) {
-  playNotificationSound();
-  playNotificationSound();
-
-  if ('Notification' in window && Notification.permission === 'granted') {
-    new Notification('🎤 It\'s Your Turn!', {
-      body: `${student?.name || ''} — Please come in for your interview now!`,
-      icon: 'logo.png',
-      vibrate: [200, 100, 200],
-    });
-  }
-
-  const flash = document.createElement('div');
-  flash.style.cssText = `
-    position:fixed;inset:0;background:rgba(245,197,24,0.15);
-    z-index:9999;pointer-events:none;
-    animation:flashScreen 1.5s ease forwards;
-  `;
-  document.head.insertAdjacentHTML('beforeend',`
-    <style>@keyframes flashScreen{0%,100%{opacity:0}30%,70%{opacity:1}}</style>`);
-  document.body.appendChild(flash);
-  setTimeout(() => flash.remove(), 1500);
 }
 
 // =========================================
