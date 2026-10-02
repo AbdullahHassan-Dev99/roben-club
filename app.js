@@ -100,11 +100,25 @@ function listenCurrent(callback) {
   });
 }
 
+let _initialCallProcessed = false;
+let _lastHandledCallNonce = null;
+
 function listenCallAlert(callback) {
   if (!db) return;
+  _initialCallProcessed = false;
   db.ref(PATHS.CALL).on('value', snap => {
+    // When listener attaches on page load, ALWAYS ignore the existing DB value
+    if (!_initialCallProcessed) {
+      _initialCallProcessed = true;
+      const initial = snap.val();
+      if (initial && initial.nonce) {
+        _lastHandledCallNonce = initial.nonce;
+      }
+      return;
+    }
     const val = snap.val();
-    if (val) callback(val);
+    if (!val) return;
+    callback(val);
   });
 }
 
@@ -205,7 +219,7 @@ function playNotificationSound() {
 // ─── Shared Audio System & Sound Playback ─────────────────────
 let _ringInterval = null;
 let _sharedAudioCtx = null;
-let _lastHandledCallNonce = null;
+const SILENT_WAV_B64 = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
 
 function getAudioContext() {
   if (!_sharedAudioCtx) {
@@ -219,7 +233,6 @@ function getAudioContext() {
 
 const _pageLoadTimestamp = Date.now();
 let _isAudioArmed = false;
-let _silentOsc = null;
 
 function getMyStudentId() {
   return localStorage.getItem('myStudentId') || sessionStorage.getItem('myStudentId');
@@ -245,44 +258,58 @@ function getAlarmAudioElement() {
   return el;
 }
 
-// Arm audio on first touch/click so mobile browsers keep media session active
+function updateSoundArmUI() {
+  const box = document.getElementById('soundArmBox');
+  if (box) {
+    box.innerHTML = `
+      <span style="font-size:1.4rem;">✅</span>
+      <div style="flex:1;">
+        <strong style="color:#2ecc71;font-size:0.9rem;display:block;">Sound Alert is Active</strong>
+        <span style="color:var(--text-secondary);font-size:0.78rem;">Alarm is ready when called.</span>
+      </div>
+    `;
+    box.style.borderColor = 'rgba(46,204,113,0.5)';
+    box.style.background = 'rgba(46,204,113,0.08)';
+  }
+}
+
+// Arm audio silently on first touch/click (NEVER play the alarm sound on entry!)
 function armAudioPlayback() {
   if (_isAudioArmed) return;
 
-  const audioEl = getAlarmAudioElement();
-  if (audioEl) {
-    audioEl.volume = 0.001;
-    audioEl.play().then(() => {
-      _isAudioArmed = true;
-      const box = document.getElementById('soundArmBox');
-      if (box) {
-        box.innerHTML = `
-          <span style="font-size:1.4rem;">✅</span>
-          <div style="flex:1;">
-            <strong style="color:#2ecc71;font-size:0.9rem;display:block;">Sound Alert is Active</strong>
-            <span style="color:var(--text-secondary);font-size:0.78rem;">Your alarm will sound when called.</span>
-          </div>
-        `;
-        box.style.borderColor = 'rgba(46,204,113,0.5)';
-        box.style.background = 'rgba(46,204,113,0.08)';
-      }
-    }).catch(e => {
-      console.warn('Arm audio pending user tap:', e);
-    });
-  }
-
+  // 1. Resume Web Audio Context silently
   try {
     const ctx = getAudioContext();
-    if (ctx) {
-      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-      if (!_silentOsc) {
-        _silentOsc = ctx.createOscillator();
-        const silentGain = ctx.createGain();
-        silentGain.gain.value = 0.0001;
-        _silentOsc.connect(silentGain);
-        silentGain.connect(ctx.destination);
-        _silentOsc.start(0);
-      }
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().then(() => {
+        _isAudioArmed = true;
+        updateSoundArmUI();
+      }).catch(() => {});
+    } else if (ctx && ctx.state === 'running') {
+      _isAudioArmed = true;
+      updateSoundArmUI();
+    }
+  } catch(e) {}
+
+  // 2. Play 0-length silent WAV to unlock mobile HTML5 audio pipeline silently
+  try {
+    const silent = new Audio(SILENT_WAV_B64);
+    const p = silent.play();
+    if (p !== undefined) {
+      p.then(() => {
+        silent.pause();
+        _isAudioArmed = true;
+        updateSoundArmUI();
+      }).catch(() => {});
+    }
+  } catch(e) {}
+
+  // 3. Ensure alarm audio element is preloaded but strictly PAUSED
+  try {
+    const audioEl = getAlarmAudioElement();
+    if (audioEl) {
+      audioEl.pause();
+      audioEl.currentTime = 0;
     }
   } catch(e) {}
 }
@@ -385,7 +412,6 @@ function stopRingSound() {
     if (audioEl) {
       audioEl.pause();
       audioEl.currentTime = 0;
-      audioEl.volume = 0.001;
     }
   } catch(e) {}
   if ('vibrate' in navigator) {
@@ -405,21 +431,15 @@ function testAlarmSound() {
 function handleIncomingCall(call) {
   if (!call || !call.studentId) return;
 
-  // 1. DO NOT play sound for calls sent BEFORE this page was loaded!
-  if (call.timestamp && call.timestamp < _pageLoadTimestamp - 2000) {
-    console.log('Skipping previous call from before page load');
-    return;
-  }
+  // 1. Don't trigger if this exact call nonce was already processed
+  if (call.nonce && call.nonce === _lastHandledCallNonce) return;
+  _lastHandledCallNonce = call.nonce;
 
   // 2. Check if this call is meant for the student on this device
   const myId = getMyStudentId();
   const myStudent = _students.find(s => s.id === myId || (myId && s.universityId === myId));
   const isForMe = (myId === call.studentId) || (myStudent && myStudent.id === call.studentId);
   if (!isForMe) return;
-
-  // 3. Don't trigger if this exact call nonce was already processed
-  if (call.nonce && call.nonce === _lastHandledCallNonce) return;
-  _lastHandledCallNonce = call.nonce;
 
   // Show alert modal on student's screen
   const modal = document.getElementById('callRingModal');
