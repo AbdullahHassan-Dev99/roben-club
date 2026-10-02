@@ -221,73 +221,111 @@ function getMyStudentId() {
   return localStorage.getItem('myStudentId') || sessionStorage.getItem('myStudentId');
 }
 
+function getAlarmAudioElement() {
+  let el = document.getElementById('alarmAudio');
+  if (!el) {
+    el = document.createElement('audio');
+    el.id = 'alarmAudio';
+    el.preload = 'auto';
+    el.loop = true;
+    el.setAttribute('playsinline', '');
+    document.body.appendChild(el);
+  }
+  if (!el.src || el.src === window.location.href || el.src === '') {
+    if (typeof ALARM_SOUND_B64 !== 'undefined' && ALARM_SOUND_B64) {
+      el.src = ALARM_SOUND_B64;
+    } else {
+      el.src = 'alarm.wav';
+    }
+  }
+  return el;
+}
+
 function playPhoneRingtone() {
   stopRingSound();
+
+  // 1. Play HTML5 Audio element (most reliable for mobile devices and background audio)
+  try {
+    const audioEl = getAlarmAudioElement();
+    if (audioEl) {
+      audioEl.currentTime = 0;
+      const playPromise = audioEl.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(e => {
+          console.warn('HTML5 audio play blocked/prevented:', e);
+        });
+      }
+    }
+  } catch(e) {
+    console.warn('HTML5 audio error:', e);
+  }
+
+  // 2. Play Web Audio API synthesized tone as concurrent second audio channel
   try {
     const ctx = getAudioContext();
-    if (!ctx) return;
-
-    if (ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
-    }
-
-    const alarmBurst = () => {
-      try {
-        const curCtx = getAudioContext();
-        if (!curCtx) return;
-        if (curCtx.state === 'suspended') {
-          curCtx.resume().catch(() => {});
-        }
-        const now = curCtx.currentTime;
-
-        // Classic Digital Alarm Clock Tone (4 rapid beeps: Beep-Beep-Beep-Beep)
-        const beeps = [0, 0.12, 0.24, 0.36];
-        beeps.forEach(offset => {
-          const t = now + offset;
-          const osc = curCtx.createOscillator();
-          const osc2 = curCtx.createOscillator();
-          const filter = curCtx.createBiquadFilter();
-          const gain = curCtx.createGain();
-
-          filter.type = 'lowpass';
-          filter.frequency.setValueAtTime(2600, t);
-
-          osc.type = 'square';
-          osc.frequency.setValueAtTime(940, t); // Classic digital alarm frequency
-
-          osc2.type = 'sine';
-          osc2.frequency.setValueAtTime(1880, t); // Harmonic overtone
-
-          osc.connect(filter);
-          osc2.connect(filter);
-          filter.connect(gain);
-          gain.connect(curCtx.destination);
-
-          gain.gain.setValueAtTime(0, t);
-          gain.gain.linearRampToValueAtTime(0.4, t + 0.015);
-          gain.gain.setValueAtTime(0.4, t + 0.065);
-          gain.gain.linearRampToValueAtTime(0, t + 0.08);
-
-          osc.start(t);
-          osc2.start(t);
-          osc.stop(t + 0.085);
-          osc2.stop(t + 0.085);
-        });
-
-        if ('vibrate' in navigator) {
-          try { navigator.vibrate([100, 50, 100, 50, 100, 50, 100, 500]); } catch(e) {}
-        }
-      } catch(err) {
-        console.warn('Alarm audio burst error:', err);
+    if (ctx) {
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
       }
-    };
 
-    alarmBurst();
-    _ringInterval = setInterval(alarmBurst, 1100);
-    setTimeout(() => { stopRingSound(); }, 40000);
+      const alarmBurst = () => {
+        try {
+          const curCtx = getAudioContext();
+          if (!curCtx) return;
+          if (curCtx.state === 'suspended') curCtx.resume().catch(() => {});
+          const now = curCtx.currentTime;
+
+          // 4 rapid digital beeps
+          const beeps = [0, 0.12, 0.24, 0.36];
+          beeps.forEach(offset => {
+            const t = now + offset;
+            const osc = curCtx.createOscillator();
+            const osc2 = curCtx.createOscillator();
+            const filter = curCtx.createBiquadFilter();
+            const gain = curCtx.createGain();
+
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(2600, t);
+
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(940, t);
+
+            osc2.type = 'sine';
+            osc2.frequency.setValueAtTime(1880, t);
+
+            osc.connect(filter);
+            osc2.connect(filter);
+            filter.connect(gain);
+            gain.connect(curCtx.destination);
+
+            gain.gain.setValueAtTime(0, t);
+            gain.gain.linearRampToValueAtTime(0.45, t + 0.015);
+            gain.gain.setValueAtTime(0.45, t + 0.065);
+            gain.gain.linearRampToValueAtTime(0, t + 0.08);
+
+            osc.start(t);
+            osc2.start(t);
+            osc.stop(t + 0.085);
+            osc2.stop(t + 0.085);
+          });
+        } catch(err) {
+          console.warn('Alarm audio burst error:', err);
+        }
+      };
+
+      alarmBurst();
+      _ringInterval = setInterval(alarmBurst, 1100);
+    }
   } catch(e) {
-    console.warn('Alarm tone error:', e);
+    console.warn('Web Audio error:', e);
   }
+
+  // 3. Vibration pattern
+  if ('vibrate' in navigator) {
+    try { navigator.vibrate([100, 50, 100, 50, 100, 50, 100, 500]); } catch(e) {}
+  }
+
+  setTimeout(() => { stopRingSound(); }, 40000);
 }
 
 function stopRingSound() {
@@ -295,6 +333,13 @@ function stopRingSound() {
     clearInterval(_ringInterval);
     _ringInterval = null;
   }
+  try {
+    const audioEl = document.getElementById('alarmAudio');
+    if (audioEl) {
+      audioEl.pause();
+      audioEl.currentTime = 0;
+    }
+  } catch(e) {}
   if ('vibrate' in navigator) {
     try { navigator.vibrate(0); } catch(e) {}
   }
@@ -306,7 +351,7 @@ function testAlarmSound() {
   playPhoneRingtone();
   setTimeout(() => {
     stopRingSound();
-  }, 3800); // Play 3 alarm cycles for test
+  }, 3800); // Play 3 alarm cycles for preview
 }
 
 function handleIncomingCall(call) {
@@ -349,12 +394,21 @@ function handleIncomingCall(call) {
 function unlockAudioOnInteraction() {
   const unlock = () => {
     try {
+      const audioEl = getAlarmAudioElement();
+      if (audioEl) {
+        audioEl.play().then(() => {
+          audioEl.pause();
+          audioEl.currentTime = 0;
+        }).catch(() => {});
+      }
+    } catch(e) {}
+
+    try {
       const ctx = getAudioContext();
       if (ctx) {
         if (ctx.state === 'suspended') {
           ctx.resume().catch(() => {});
         }
-        // Play an imperceptible micro-tone during user gesture to grant permanent audio permissions
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         gain.gain.value = 0.0001;
@@ -837,8 +891,10 @@ function renderQueue() {
         if (subEl) subEl.innerHTML = `You can select a new available slot and re-enter the queue:<br><a href="index.html" class="btn btn-sm btn-primary" style="margin-top:10px;display:inline-block;">🔄 Choose a New Slot</a>`;
         if (boxEl) boxEl.className = 'my-status-box';
       }
+      document.getElementById('guestBanner')?.classList.add('hidden');
     } else {
       myStatusSection.classList.add('hidden');
+      document.getElementById('guestBanner')?.classList.remove('hidden');
     }
   }
 

@@ -46,8 +46,22 @@
             <div class="ahead-sub" id="aheadSub">Please stay nearby and be ready when your turn arrives.</div>
           </div>
         </div>
+        <div style="margin-top:12px;text-align:right;">
+          <button type="button" class="btn btn-sm btn-ghost" onclick="testAlarmSound()" style="font-size:0.8rem;border-color:rgba(255,255,255,0.2);">🔊 Test Alarm Sound on this Phone</button>
+        </div>
       </div>
     </section>
+
+    <!-- Guest banner if not linked to any registration -->
+    <div class="guest-banner hidden" id="guestBanner" style="background:rgba(230,126,34,0.12);border:1px solid rgba(230,126,34,0.35);padding:14px 18px;border-radius:10px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:1.2rem;">⚠️</span>
+        <strong style="color:#f39c12;font-size:0.92rem;">This device is not linked to any student registration.</strong>
+      </div>
+      <p style="color:var(--text-secondary);font-size:0.82rem;margin-top:6px;line-height:1.4;">
+        If you already registered, enter your University ID below to link this phone so your alarm sounds when called. Or click "New Registration" to register.
+      </p>
+    </div>
 
     <!-- Quick lookup for students who closed browser or switched device -->
     <div class="recover-bar" id="recoverBar">
@@ -116,10 +130,14 @@
   <!-- Sound toggle -->
   <button class="sound-toggle" id="soundToggle" title="Toggle sound">🔊</button>
 
+  <!-- Audio Element for reliable mobile playback -->
+  <audio id="alarmAudio" preload="auto" loop playsinline></audio>
+
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="firebase-config.js"></script>
+  <script src="alarm_sound.js"></script>
   <script src="app.js"></script>
   <script>
     initQueuePage();

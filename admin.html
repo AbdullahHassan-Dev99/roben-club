@@ -149,12 +149,16 @@
     </div>
   </div>
 
+  <!-- Audio Element for reliable mobile playback -->
+  <audio id="alarmAudio" preload="auto" loop playsinline></audio>
+
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="firebase-config.js"></script>
   <!-- QR library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="alarm_sound.js"></script>
   <script src="app.js"></script>
   <script>
     initAdminPage();
