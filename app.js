@@ -653,7 +653,7 @@ function getRegisterUrl() {
 
   const loc = window.location;
   if (loc.protocol === 'file:') {
-    return 'https://019abdullahhassan-png.github.io/roben-club/index.html';
+    return 'https://abdullahhassan-dev99.github.io/roben-club/index.html';
   }
   const host = loc.hostname;
   const port = loc.port ? `:${loc.port}` : '';
