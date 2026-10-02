@@ -42,8 +42,8 @@
             <span class="ahead-number-label">Ahead of you</span>
           </div>
           <div class="ahead-info">
-            <div class="ahead-title" id="aheadTitle">فاضلك 0 أشخاص قبلك</div>
-            <div class="ahead-sub" id="aheadSub">خليك قريب، الموبايل هيرن بصوت عالي أول ما يجي دورك!</div>
+            <div class="ahead-title" id="aheadTitle">0 people ahead of you</div>
+            <div class="ahead-sub" id="aheadSub">Please stay nearby and be ready when your turn arrives.</div>
           </div>
         </div>
       </div>
@@ -52,9 +52,9 @@
     <!-- Quick lookup for students who closed browser or switched device -->
     <div class="recover-bar" id="recoverBar">
       <span style="font-size:1.1rem;">🔎</span>
-      <span style="font-size:.85rem;color:var(--text-secondary);flex:1 1 200px;">قفلت المتصفح أو دخلت من جهاز تاني؟ استرجع دورك ورنتك برقمك الجامعي:</span>
-      <input type="text" id="recoverIdInput" class="recover-bar-input" placeholder="الرقم الجامعي..." inputmode="numeric" />
-      <button class="btn btn-sm btn-primary" onclick="recoverMyQueue()">استرجاع دوري</button>
+      <span style="font-size:.85rem;color:var(--text-secondary);flex:1 1 200px;">Closed your browser or switched devices? Recover your turn with your University ID:</span>
+      <input type="text" id="recoverIdInput" class="recover-bar-input" placeholder="University ID..." inputmode="numeric" />
+      <button class="btn btn-sm btn-primary" onclick="recoverMyQueue()">Recover My Turn</button>
     </div>
 
     <!-- Currently being interviewed -->
@@ -92,16 +92,16 @@
 
   </main>
 
-  <!-- Full Screen Incoming Call / Ring Modal -->
+  <!-- Full Screen Incoming Call / Alert Modal -->
   <div class="call-modal-overlay hidden" id="callRingModal">
     <div class="call-modal-card">
-      <div class="call-ring-icon">📲</div>
-      <div class="call-title">🚨 نداء عاجل: <span>دورك الآن!</span> 🚨</div>
+      <div class="call-ring-icon">📣</div>
+      <div class="call-title">🚨 Notice: <span>Your Turn Now!</span> 🚨</div>
       <p class="call-desc" id="callModalDesc">
-        يرجى التوجه إلى لجنة المقابلات فوراً!
+        Please proceed to the interview room now!
       </p>
       <button class="btn-ack-call" id="ackCallBtn" onclick="stopRingSound()">
-        ✅ أنا قادم (إيقاف الرنة)
+        ✅ I'm Coming / Dismiss
       </button>
     </div>
   </div>

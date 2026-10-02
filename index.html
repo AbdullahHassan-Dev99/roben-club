@@ -40,11 +40,11 @@
       <!-- Quick Returning Student Banner -->
       <div class="already-banner hidden" id="alreadyRegisteredBanner">
         <div class="already-banner-text" id="alreadyRegisteredText">
-          👋 مرحباً بك! لقد سجلت بالفعل في المقابلات.
+          👋 Welcome back! You are already registered for an interview.
         </div>
         <div class="already-banner-actions">
-          <a href="queue.html" class="btn btn-sm btn-primary">👀 عرض دورك في الطابور</a>
-          <button type="button" class="btn btn-sm btn-ghost" onclick="resetFormForNewSlot()">🔄 حجز موعد جديد / تعديل</button>
+          <a href="queue.html" class="btn btn-sm btn-primary">👀 View Your Position</a>
+          <button type="button" class="btn btn-sm btn-ghost" onclick="resetFormForNewSlot()">🔄 Change / Pick New Slot</button>
         </div>
       </div>
 
@@ -110,7 +110,7 @@
         </div>
 
         <button type="submit" class="btn btn-primary btn-submit" id="submitBtn">
-          <span class="btn-text">🚀 Add Me to the Queue</span>
+          <span class="btn-text">🚀 Register for Interview</span>
           <span class="btn-loader hidden">⏳</span>
         </button>
       </form>
@@ -130,29 +130,29 @@
           <span class="ahead-number-label">Ahead of you</span>
         </div>
         <div class="ahead-info">
-          <div class="ahead-title" id="indexAheadTitle">جاري حساب دورك...</div>
-          <div class="ahead-sub">خليك في الصفحة، الموبايل هيرن بصوت عالي أول ما الأدمن يناديك!</div>
+          <div class="ahead-title" id="indexAheadTitle">Calculating queue position...</div>
+          <div class="ahead-sub">Please keep this page open and be ready when called.</div>
         </div>
       </div>
 
       <div class="success-info" id="successInfo"></div>
       <p class="success-wait">
-        🔔 لا تغلق الصفحة — الموبايل هيرن ويهتز فور استدعائك!
+        🔔 Please stay nearby so you don't miss your turn!
       </p>
       <a href="queue.html" class="btn btn-secondary">👀 View the Queue</a>
     </div>
   </main>
 
-  <!-- Full Screen Incoming Call / Ring Modal -->
+  <!-- Full Screen Incoming Call / Alert Modal -->
   <div class="call-modal-overlay hidden" id="callRingModal">
     <div class="call-modal-card">
-      <div class="call-ring-icon">📲</div>
-      <div class="call-title">🚨 نداء عاجل: <span>دورك الآن!</span> 🚨</div>
+      <div class="call-ring-icon">📣</div>
+      <div class="call-title">🚨 Notice: <span>Your Turn Now!</span> 🚨</div>
       <p class="call-desc" id="callModalDesc">
-        يرجى التوجه إلى لجنة المقابلات فوراً!
+        Please proceed to the interview room now!
       </p>
       <button class="btn-ack-call" id="ackCallBtn" onclick="stopRingSound()">
-        ✅ أنا قادم (إيقاف الرنة)
+        ✅ I'm Coming / Dismiss
       </button>
     </div>
   </div>

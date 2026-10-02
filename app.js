@@ -202,10 +202,20 @@ function playNotificationSound() {
   } catch(e) {}
 }
 
-// ─── Loud Phone Ringtone & Vibration ──────────────────────────
+// ─── Shared Audio System & Sound Playback ─────────────────────
 let _ringInterval = null;
-let _ringAudioCtx = null;
+let _sharedAudioCtx = null;
 let _lastHandledCallNonce = null;
+
+function getAudioContext() {
+  if (!_sharedAudioCtx) {
+    const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtxClass) {
+      _sharedAudioCtx = new AudioCtxClass();
+    }
+  }
+  return _sharedAudioCtx;
+}
 
 function getMyStudentId() {
   return localStorage.getItem('myStudentId') || sessionStorage.getItem('myStudentId');
@@ -214,44 +224,50 @@ function getMyStudentId() {
 function playPhoneRingtone() {
   stopRingSound();
   try {
-    const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtxClass) return;
-    _ringAudioCtx = new AudioCtxClass();
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
 
     const ringBurst = () => {
-      if (!_ringAudioCtx) return;
-      if (_ringAudioCtx.state === 'suspended') {
-        _ringAudioCtx.resume().catch(() => {});
-      }
-      const now = _ringAudioCtx.currentTime;
+      try {
+        const curCtx = getAudioContext();
+        if (!curCtx) return;
+        if (curCtx.state === 'suspended') {
+          curCtx.resume().catch(() => {});
+        }
+        const now = curCtx.currentTime;
 
-      // Realistic dual-tone telephone bell ring (440Hz + 480Hz)
-      [440, 480].forEach(freq => {
-        const osc = _ringAudioCtx.createOscillator();
-        const gain = _ringAudioCtx.createGain();
-        osc.connect(gain);
-        gain.connect(_ringAudioCtx.destination);
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, now);
+        // Dual-tone chime (440Hz + 480Hz)
+        [440, 480].forEach(freq => {
+          const osc = curCtx.createOscillator();
+          const gain = curCtx.createGain();
+          osc.connect(gain);
+          gain.connect(curCtx.destination);
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now);
 
-        gain.gain.setValueAtTime(0, now);
-        gain.gain.linearRampToValueAtTime(0.45, now + 0.06);
-        gain.gain.setValueAtTime(0.45, now + 1.6);
-        gain.gain.linearRampToValueAtTime(0, now + 1.7);
+          gain.gain.setValueAtTime(0, now);
+          gain.gain.linearRampToValueAtTime(0.5, now + 0.08);
+          gain.gain.setValueAtTime(0.5, now + 1.5);
+          gain.gain.linearRampToValueAtTime(0, now + 1.65);
 
-        osc.start(now);
-        osc.stop(now + 1.75);
-      });
+          osc.start(now);
+          osc.stop(now + 1.7);
+        });
 
-      // Mobile phone vibration (repeating ring pattern)
-      if ('vibrate' in navigator) {
-        navigator.vibrate([1600, 1000]);
+        if ('vibrate' in navigator) {
+          try { navigator.vibrate([1600, 1000]); } catch(e) {}
+        }
+      } catch(err) {
+        console.warn('Audio burst error:', err);
       }
     };
 
     ringBurst();
-    _ringInterval = setInterval(ringBurst, 2800);
-    // Auto-stop after 40 seconds if unacknowledged
+    _ringInterval = setInterval(ringBurst, 2600);
     setTimeout(() => { stopRingSound(); }, 40000);
   } catch(e) {
     console.warn('Audio ringtone error:', e);
@@ -263,12 +279,8 @@ function stopRingSound() {
     clearInterval(_ringInterval);
     _ringInterval = null;
   }
-  if (_ringAudioCtx) {
-    try { _ringAudioCtx.close(); } catch(e) {}
-    _ringAudioCtx = null;
-  }
   if ('vibrate' in navigator) {
-    navigator.vibrate(0);
+    try { navigator.vibrate(0); } catch(e) {}
   }
   document.getElementById('callRingModal')?.classList.add('hidden');
 }
@@ -284,24 +296,24 @@ function handleIncomingCall(call) {
   if (call.timestamp && Date.now() - call.timestamp > 180000) return;
   _lastHandledCallNonce = call.nonce;
 
-  // Show ringing modal on student's screen
+  // Show alert modal on student's screen
   const modal = document.getElementById('callRingModal');
   const desc = document.getElementById('callModalDesc');
   if (desc) {
-    const studentName = call.studentName || localStorage.getItem('myStudentName') || 'عزيزي الطالب';
-    desc.textContent = `${studentName} — لجنة المقابلات تناديك الآن، يرجى التوجه للغرفة فوراً!`;
+    const studentName = call.studentName || localStorage.getItem('myStudentName') || 'Candidate';
+    desc.textContent = `${studentName} — The interview committee is calling you now. Please proceed to the interview room!`;
   }
   if (modal) {
     modal.classList.remove('hidden');
   }
 
-  // Play loud repeating phone ringtone and vibrate mobile!
+  // Play audio alert
   playPhoneRingtone();
 
   // Send system push notification
   if ('Notification' in window && Notification.permission === 'granted') {
-    new Notification('🚨 نداء عاجل: دورك الآن في المقابلة!', {
-      body: `${call.studentName || ''} — يرجى التوجه إلى لجنة المقابلات فوراً!`,
+    new Notification('🚨 Notice: Your Turn for Interview!', {
+      body: `${call.studentName || ''} — Please proceed to the interview room now!`,
       icon: 'logo.png',
       requireInteraction: true,
       vibrate: [1000, 500, 1000, 500, 1000]
@@ -309,23 +321,29 @@ function handleIncomingCall(call) {
   }
 }
 
-// Unlock audio on mobile first touch/click
+// Unlock audio on mobile interaction
 function unlockAudioOnInteraction() {
   const unlock = () => {
     try {
-      const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
-      if (AudioCtxClass) {
-        const dummyCtx = new AudioCtxClass();
-        dummyCtx.resume().then(() => {
-          dummyCtx.close();
-        });
+      const ctx = getAudioContext();
+      if (ctx) {
+        if (ctx.state === 'suspended') {
+          ctx.resume().catch(() => {});
+        }
+        // Play an imperceptible micro-tone during user gesture to grant permanent audio permissions
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        gain.gain.value = 0.0001;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(0);
+        osc.stop(ctx.currentTime + 0.05);
       }
     } catch(e) {}
-    document.removeEventListener('click', unlock);
-    document.removeEventListener('touchstart', unlock);
   };
-  document.addEventListener('click', unlock, { once: true });
-  document.addEventListener('touchstart', unlock, { once: true });
+  ['touchstart', 'touchend', 'click', 'pointerdown', 'keydown'].forEach(evt => {
+    document.addEventListener(evt, unlock, { passive: true });
+  });
 }
 
 // ─── Particles ────────────────────────────────────────────────
@@ -389,11 +407,11 @@ function initRegisterPage() {
           if (banner && textEl) {
             banner.classList.remove('hidden');
             const slot = getSlotById(found.slotId);
-            const slotTime = slot ? ` (موعدك السابق: ${slot.time})` : '';
+            const slotTime = slot ? ` (previous slot: ${slot.time})` : '';
             if (found.status === 'absent' || found.status === 'done') {
-              textEl.innerHTML = `👋 أهلاً بك يا <strong>${escHtml(found.name)}</strong>! حالة تسجيلك السابقة: <strong>${statusLabel(found.status).text}</strong>.<br>✨ يمكنك الآن اختيار موعد جديد بالأسفل والضغط على زر التسجيل لحجز موعد جديد والدخول للطابور مرة أخرى!`;
+              textEl.innerHTML = `👋 Welcome back, <strong>${escHtml(found.name)}</strong>! Previous status: <strong>${statusLabel(found.status).text}</strong>.<br>✨ You can pick a new available time slot below to re-enter the queue!`;
             } else {
-              textEl.innerHTML = `👋 مرحباً <strong>${escHtml(found.name)}</strong>! أنت مسجل بالفعل${slotTime}. يمكنك تعديل موعدك باختيار موعد جديد أو الضغط على "عرض دورك في الطابور".`;
+              textEl.innerHTML = `👋 Welcome, <strong>${escHtml(found.name)}</strong>! You are already registered${slotTime}. You can pick a new slot to change your time or click to view your position.`;
             }
           }
         }
@@ -412,11 +430,11 @@ function checkAlreadyRegistered() {
 
   const slot = getSlotById(existing.slotId);
   banner.classList.remove('hidden');
-  const slotTime = slot ? ` (موعدك: ${slot.time})` : '';
+  const slotTime = slot ? ` (slot: ${slot.time})` : '';
   if (existing.status === 'absent' || existing.status === 'done') {
-    textEl.innerHTML = `👋 مرحباً <strong>${escHtml(existing.name)}</strong>! انتهت مقابلتك أو عدي وقتك (الحالة: <strong>${statusLabel(existing.status).text}</strong>).<br>✨ يمكنك الآن اختيار موعد جديد بالأسفل والضغط على الزر لإعادة التسجيل ودخول الطابور مجدداً!`;
+    textEl.innerHTML = `👋 Welcome back, <strong>${escHtml(existing.name)}</strong>! Your previous session ended (Status: <strong>${statusLabel(existing.status).text}</strong>).<br>✨ You can pick a new time slot below to re-enter the queue!`;
   } else {
-    textEl.innerHTML = `👋 مرحباً <strong>${escHtml(existing.name)}</strong>! أنت مسجل بالفعل${slotTime}. حالتك الآن: <strong>${statusLabel(existing.status).text}</strong>.`;
+    textEl.innerHTML = `👋 Welcome back, <strong>${escHtml(existing.name)}</strong>! You are already registered${slotTime}. Current status: <strong>${statusLabel(existing.status).text}</strong>.`;
   }
 
   // Pre-fill inputs for convenience
@@ -444,7 +462,7 @@ function updateIndexAheadCard() {
 
   if (myStudent.status === 'interviewing') {
     countEl.textContent = '0';
-    titleEl.textContent = '🚨 دورك الآن في المقابلة! يرجى الدخول فوراً.';
+    titleEl.textContent = '🚨 It\'s Your Turn! Please proceed to the interview room.';
   } else if (myStudent.status === 'waiting') {
     const waitingList = _students
       .filter(s => s.status === 'waiting')
@@ -452,13 +470,13 @@ function updateIndexAheadCard() {
     const myIndex = waitingList.findIndex(s => s.id === myId);
     const ahead = myIndex >= 0 ? myIndex : 0;
     countEl.textContent = ahead;
-    titleEl.textContent = ahead === 0 ? 'أنت التالي مباشرة! استعد.' : `فاضلك ${ahead} أشخاص قبلك`;
+    titleEl.textContent = ahead === 0 ? 'You are next in line! Please be ready.' : `${ahead} ${ahead === 1 ? 'person' : 'people'} ahead of you`;
   } else if (myStudent.status === 'done') {
     countEl.textContent = '✓';
-    titleEl.textContent = 'تمت مقابلتك بنجاح!';
+    titleEl.textContent = 'Interview completed successfully!';
   } else if (myStudent.status === 'absent') {
     countEl.textContent = '!';
-    titleEl.textContent = 'تم تسجيلك كغائب — يمكنك حجز موعد جديد بالأسفل';
+    titleEl.textContent = 'Marked absent / expired — You can book a new slot below';
   }
 }
 
@@ -532,7 +550,7 @@ async function handleRegisterSubmit(e) {
   // If already registered: allow re-registration or slot change!
   if (existing) {
     if (existing.status === 'absent' || existing.status === 'done') {
-      const confirmReRegister = confirm(`أهلاً بك يا ${existing.name}!\n\nانتهت مقابلتك السابقة أو تم تسجيلك كغائب.\nهل تريد حجز الموعد الجديد والدخول لقائمة الانتظار مجدداً؟`);
+      const confirmReRegister = confirm(`Welcome back, ${existing.name}!\n\nYour previous interview slot ended or was marked absent.\nWould you like to book the new slot and re-enter the queue?`);
       if (confirmReRegister) {
         existing.slotId = selectedSlotId;
         existing.status = 'waiting';
@@ -546,7 +564,7 @@ async function handleRegisterSubmit(e) {
         sessionStorage.setItem('myStudentId', existing.id);
         showSuccessCard(existing);
         updateIndexAheadCard();
-        alert('✅ تم حجز موعدك الجديد بنجاح وإعادتك لقائمة الانتظار!');
+        alert('✅ Your new time slot has been booked and you have re-entered the queue!');
         return;
       } else {
         if (btn) btn.disabled = false;
@@ -554,7 +572,7 @@ async function handleRegisterSubmit(e) {
       }
     } else {
       // Student is currently waiting or interviewing
-      const confirmChangeSlot = confirm(`أهلاً بك يا ${existing.name}!\n\nأنت مسجل بالفعل في الطابور.\n- اضغط OK لتحديث موعدك إلى الموعد الجديد.\n- أو اضغط Cancel للانتقال مباشرة لشاشة معرفة دورك.`);
+      const confirmChangeSlot = confirm(`Welcome back, ${existing.name}!\n\nYou are already registered in the queue.\n- Click OK to update your registration to the new time slot.\n- Click Cancel to view your current position.`);
       if (confirmChangeSlot) {
         existing.slotId = selectedSlotId;
         existing.phone = document.getElementById('phoneNumber').value.trim() || existing.phone;
@@ -565,7 +583,7 @@ async function handleRegisterSubmit(e) {
         sessionStorage.setItem('myStudentId', existing.id);
         showSuccessCard(existing);
         updateIndexAheadCard();
-        alert('✅ تم تحديث موعدك بنجاح!');
+        alert('✅ Your interview slot has been updated successfully!');
         return;
       } else {
         localStorage.setItem('myStudentId', existing.id);
@@ -711,7 +729,7 @@ function recoverMyQueue() {
   const input = document.getElementById('recoverIdInput');
   const raw = input ? input.value.trim() : '';
   if (!raw) {
-    alert('من فضلك أدخل الرقم الجامعي أو رقم الموبايل.');
+    alert('Please enter your University ID or Phone number.');
     return;
   }
   const found = _students.find(s => 
@@ -726,10 +744,10 @@ function recoverMyQueue() {
     myStudentId = found.id;
     unlockAudioOnInteraction();
     renderQueue();
-    alert(`✅ أهلاً بك يا ${found.name}!\nتم استرجاع دورك وتفعيل رنة الموبايل بنجاح!`);
+    alert(`✅ Welcome back, ${found.name}!\nYour queue position has been recovered.`);
     document.getElementById('myStatusSection')?.scrollIntoView({ behavior: 'smooth' });
   } else {
-    alert('❌ لم يتم العثور على طالب مسجل بهذا الرقم.\nتأكد من كتابة الرقم الجامعي بشكل صحيح، أو اضغط "New Registration" للتسجيل من جديد.');
+    alert('❌ No registration found with this ID.\nPlease verify your University ID or click "New Registration" to register.');
   }
 }
 
@@ -744,7 +762,7 @@ function renderQueue() {
   const myId = getMyStudentId();
   const myStudent = _students.find(s => s.id === myId);
 
-  // 1. Personalized Student Box (#myStatusSection) — "فاضلك العدد دا"
+  // 1. Personalized Student Box (#myStatusSection)
   const myStatusSection = document.getElementById('myStatusSection');
   if (myStatusSection) {
     if (myStudent) {
@@ -756,13 +774,13 @@ function renderQueue() {
       const subEl   = document.getElementById('aheadSub');
       const boxEl   = document.getElementById('myStatusBox');
 
-      if (nameEl) nameEl.textContent = `مرحباً بك: ${myStudent.name}`;
+      if (nameEl) nameEl.textContent = `Welcome, ${myStudent.name}`;
 
       if (myStudent.status === 'interviewing') {
-        if (tagEl) tagEl.textContent = '🎤 دورك الآن!';
+        if (tagEl) tagEl.textContent = '🎤 Your Turn Now!';
         if (countEl) countEl.textContent = '0';
-        if (titleEl) titleEl.textContent = '🚨 دورك الآن في المقابلة!';
-        if (subEl) subEl.textContent = 'يرجى التوجه إلى لجنة المقابلات فوراً.';
+        if (titleEl) titleEl.textContent = '🚨 It\'s Your Turn Now!';
+        if (subEl) subEl.textContent = 'Please proceed to the interview room immediately.';
         if (boxEl) boxEl.className = 'my-status-box my-turn-now-box';
       } else if (myStudent.status === 'waiting') {
         // Calculate how many waiting students are before me
@@ -773,26 +791,26 @@ function renderQueue() {
         const myIndex = waitingList.findIndex(s => s.id === myId);
         const aheadCount = myIndex >= 0 ? myIndex : 0;
 
-        if (tagEl) tagEl.textContent = '⏳ في قائمة الانتظار';
+        if (tagEl) tagEl.textContent = '⏳ In Waiting Queue';
         if (countEl) countEl.textContent = aheadCount;
         if (titleEl) {
           titleEl.textContent = aheadCount === 0 
-            ? 'أنت التالي مباشرة! استعد للمقابلة.' 
-            : `فاضلك ${aheadCount} ${aheadCount === 1 ? 'شخص فقط' : (aheadCount <= 10 ? 'أشخاص' : 'شخص')} قبلك في الطابور`;
+            ? 'You are next in line! Please be ready.' 
+            : `${aheadCount} ${aheadCount === 1 ? 'person' : 'people'} ahead of you in the queue`;
         }
-        if (subEl) subEl.textContent = 'خليك قريب، الموبايل هيرن ويهتز بصوت عالي أول ما الأدمن يستدعيك!';
+        if (subEl) subEl.textContent = 'Please stay nearby and keep this page open.';
         if (boxEl) boxEl.className = 'my-status-box';
       } else if (myStudent.status === 'done') {
-        if (tagEl) tagEl.textContent = '✅ تمت المقابلة';
+        if (tagEl) tagEl.textContent = '✅ Interview Done';
         if (countEl) countEl.textContent = '✓';
-        if (titleEl) titleEl.textContent = 'تمت مقابلتك بنجاح!';
-        if (subEl) subEl.textContent = 'نتمنى لك التوفيق في RobEn Club!';
+        if (titleEl) titleEl.textContent = 'Your interview has been completed!';
+        if (subEl) subEl.textContent = 'Best of luck in RobEn Club!';
         if (boxEl) boxEl.className = 'my-status-box';
       } else if (myStudent.status === 'absent') {
-        if (tagEl) tagEl.textContent = '❌ غائب / عدي وقتك';
+        if (tagEl) tagEl.textContent = '❌ Absent / Expired';
         if (countEl) countEl.textContent = '!';
-        if (titleEl) titleEl.textContent = 'انتهى وقت مقابلتك أو تم تسجيلك كغائب';
-        if (subEl) subEl.innerHTML = `لا تقلق، يمكنك حجز موعد جديد والدخول للطابور مجدداً:<br><a href="index.html" class="btn btn-sm btn-primary" style="margin-top:10px;display:inline-block;">🔄 اضغط هنا لاختيار موعد جديد</a>`;
+        if (titleEl) titleEl.textContent = 'Your interview time slot has passed or was marked absent';
+        if (subEl) subEl.innerHTML = `You can select a new available slot and re-enter the queue:<br><a href="index.html" class="btn btn-sm btn-primary" style="margin-top:10px;display:inline-block;">🔄 Choose a New Slot</a>`;
         if (boxEl) boxEl.className = 'my-status-box';
       }
     } else {
@@ -810,12 +828,12 @@ function renderQueue() {
   if (currentStudent) {
     const isMe = currentStudent.id === myId;
     const slot = getSlotById(currentStudent.slotId);
-    nowNameEl.textContent   = isMe ? `${currentStudent.name} (👉 أنت)` : 'طالب قيد المقابلة الآن 🎤';
+    nowNameEl.textContent   = isMe ? `${currentStudent.name} (👉 You)` : 'Candidate currently in interview 🎤';
     nowSlotEl.textContent   = slot ? `⏰ ${slot.time}` : '';
     nowAvatarEl.textContent = isMe ? getInitials(currentStudent.name) : '🎤';
     if (nowCard) nowCard.style.borderColor = 'rgba(245,197,24,0.5)';
   } else {
-    nowNameEl.textContent   = 'لا أحد حالياً';
+    nowNameEl.textContent   = 'No one currently';
     nowSlotEl.textContent   = '';
     nowAvatarEl.textContent = '—';
     if (nowCard) nowCard.style.borderColor = '';
@@ -829,9 +847,9 @@ function renderQueue() {
     const nextUp = waitingList.sort((a,b) => new Date(a.registeredAt)-new Date(b.registeredAt))[0];
     if (nextBannerTxt) {
       if (nextUp.id === myId) {
-        nextBannerTxt.textContent = `🔔 دورك القادم مباشرة! استعد للدخول للمقابلة.`;
+        nextBannerTxt.textContent = `🔔 You are next up! Please get ready for your interview.`;
       } else {
-        nextBannerTxt.textContent = `🔔 جاري تجهيز الطالب التالي للمقابلة...`;
+        nextBannerTxt.textContent = `🔔 The next candidate is being called...`;
       }
     }
     nextBanner?.classList.remove('hidden');
@@ -846,7 +864,7 @@ function renderQueue() {
   const sorted = [..._students].sort((a,b) => new Date(a.registeredAt)-new Date(b.registeredAt));
 
   if (sorted.length === 0) {
-    listEl.innerHTML = `<div class="empty-state"><div class="empty-icon">🕐</div><p>لا يوجد طلاب في الطابور حالياً.</p></div>`;
+    listEl.innerHTML = `<div class="empty-state"><div class="empty-icon">🕐</div><p>No students in the queue yet.</p></div>`;
     updateQueueStats();
     return;
   }
@@ -865,8 +883,8 @@ function renderQueue() {
 
     // Privacy Protection: Obfuscate everyone else's name!
     const displayName = isMe
-      ? `${escHtml(student.name)} <span style="color:var(--gold);font-weight:800;font-size:.85rem;">(👉 أنت / You)</span>`
-      : (student.status === 'interviewing' ? 'طالب قيد المقابلة الآن 🎤' : `طالب رقم ${idx + 1}`);
+      ? `${escHtml(student.name)} <span style="color:var(--gold);font-weight:800;font-size:.85rem;">(👉 You)</span>`
+      : (student.status === 'interviewing' ? 'Candidate currently in interview 🎤' : `Candidate #${idx + 1}`);
 
     const displayAvatar = isMe ? getInitials(student.name) : `#${idx + 1}`;
 
@@ -1113,11 +1131,11 @@ function renderStudentsTable() {
 function buildActionButtons(student, isCurrent) {
   const btns = [];
   if (student.status === 'waiting' && !isCurrent) {
-    btns.push(`<button class="action-btn btn-call" onclick="callStudent('${student.id}')">📣 Call & Ring</button>`);
+    btns.push(`<button class="action-btn btn-call" onclick="callStudent('${student.id}')">📣 Call</button>`);
   }
   if (isCurrent) {
     const ringTimes = student.callCount || 1;
-    btns.push(`<button class="action-btn btn-ring-again" onclick="callStudent('${student.id}')" title="أرسل رنة قوية لموبايل الطالب مرة أخرى">🔔 Ring Again (${ringTimes})</button>`);
+    btns.push(`<button class="action-btn btn-ring-again" onclick="callStudent('${student.id}')" title="Call candidate again">📣 Call Again (${ringTimes})</button>`);
     btns.push(`<button class="action-btn btn-done"   onclick="markDone('${student.id}')">✅ Done</button>`);
     btns.push(`<button class="action-btn btn-absent" onclick="markAbsent('${student.id}')">❌ Absent</button>`);
   }
@@ -1144,7 +1162,7 @@ async function callStudent(id) {
   await updateStudent(updatedStudent);
   await setCurrentId(id);
 
-  // Send Call signal to Firebase with unique nonce to trigger mobile ring every single time ("واكتر من مرا")!
+  // Send Call signal to Firebase with unique nonce to trigger incoming call alert every time
   await db.ref(PATHS.CALL).set({
     studentId: id,
     studentName: student.name,
