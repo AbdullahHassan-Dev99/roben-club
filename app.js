@@ -630,26 +630,24 @@ async function deleteSlot(slotId) {
 }
 
 // ─── QR ───────────────────────────────────────────────────────
+const OFFICIAL_REGISTER_URL = 'https://abdullahhassan-dev99.github.io/roben-club/index.html';
+
 function getRegisterUrl() {
   const ipInput = document.getElementById('ipOverrideInput');
   let val = ipInput ? ipInput.value.trim() : '';
 
-  if (val) {
-    if (val.startsWith('http://') || val.startsWith('https://')) {
-      return val.endsWith('.html') ? val : val.replace(/\/$/, '') + '/index.html';
-    }
-    return `http://${val}${window.location.port ? ':' + window.location.port : ''}/index.html`;
+  if (val && (val.startsWith('http://') || val.startsWith('https://'))) {
+    return val;
   }
 
   const loc = window.location;
-  if (loc.protocol === 'file:') {
-    return 'https://abdullahhassan-dev99.github.io/roben-club/index.html';
+  if (loc.protocol === 'http:' || loc.protocol === 'https:') {
+    const basePath = loc.pathname.substring(0, loc.pathname.lastIndexOf('/') + 1) || '/';
+    const origin = loc.origin || (loc.protocol + '//' + loc.host);
+    return `${origin}${basePath}index.html`;
   }
 
-  // Preserve the subfolder on GitHub Pages or custom host (e.g. /roben-club/)
-  const basePath = loc.pathname.substring(0, loc.pathname.lastIndexOf('/') + 1) || '/';
-  const origin = loc.origin || (loc.protocol + '//' + loc.host);
-  return `${origin}${basePath}index.html`;
+  return OFFICIAL_REGISTER_URL;
 }
 
 function generateQRCode() {
@@ -662,8 +660,7 @@ function generateQRCode() {
 
   const ipInput = document.getElementById('ipOverrideInput');
   if (ipInput && !ipInput.value) {
-    const h = window.location.hostname;
-    if (h !== 'localhost' && h !== '127.0.0.1') ipInput.value = h;
+    ipInput.value = url;
   }
 
   qrBox.innerHTML = '';
