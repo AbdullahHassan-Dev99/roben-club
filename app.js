@@ -643,7 +643,7 @@ function generateQRCode() {
 
   const url = OFFICIAL_REGISTER_URL;
   if (qrUrlEl) {
-    qrUrlEl.innerHTML = `<a href="${url}" target="_blank" style="color:var(--primary);text-decoration:underline;word-break:break-all;">${url}</a>`;
+    qrUrlEl.innerHTML = `<a href="${url}" target="_blank" style="color:var(--primary);text-decoration:underline;word-break:break-all;font-size:0.95rem;font-weight:600;">${url}</a>`;
   }
 
   qrBox.innerHTML = '';
