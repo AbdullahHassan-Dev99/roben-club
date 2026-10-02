@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RobEn Club — Interview Queue</title>
+  <meta name="description" content="Track your position in the RobEn Club interview queue." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="queue-page">
+
+  <div class="particles" id="particles"></div>
+
+  <header class="site-header">
+    <div class="logo-wrap">
+      <img src="logo.png" alt="RobEn Club Logo" class="logo-img" />
+      <div>
+        <span class="club-name">RobEn Club</span>
+        <span class="club-sub">Interview Queue</span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <a href="index.html" class="btn btn-sm btn-ghost">📝 New Registration</a>
+    </div>
+  </header>
+
+  <main class="queue-main">
+
+    <!-- Currently being interviewed -->
+    <section class="now-section" id="nowSection">
+      <div class="now-label">🎤 Currently Being Interviewed</div>
+      <div class="now-card" id="nowCard">
+        <div class="now-avatar" id="nowAvatar">—</div>
+        <div class="now-info">
+          <div class="now-name" id="nowName">No one currently</div>
+          <div class="now-slot" id="nowSlot"></div>
+        </div>
+        <div class="pulse-ring"></div>
+      </div>
+    </section>
+
+    <!-- Next up alert banner -->
+    <div class="next-banner hidden" id="nextBanner">
+      <span class="bell-anim">🔔</span>
+      <span id="nextBannerText"></span>
+    </div>
+
+    <!-- Queue list -->
+    <section class="queue-section">
+      <div class="section-header">
+        <h2 class="section-title">📋 Waiting Queue</h2>
+        <div class="queue-stats" id="queueStats"></div>
+      </div>
+      <div class="queue-list" id="queueList">
+        <div class="empty-state">
+          <div class="empty-icon">🕐</div>
+          <p>No students in the queue yet.</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Notification permission banner -->
+  <div class="notif-banner hidden" id="notifBanner">
+    <span>🔔 Enable notifications so you don't miss your turn!</span>
+    <button class="btn btn-sm btn-primary" id="enableNotifBtn">Enable</button>
+    <button class="btn btn-sm btn-ghost" id="dismissNotifBtn">No thanks</button>
+  </div>
+
+  <!-- Sound toggle -->
+  <button class="sound-toggle" id="soundToggle" title="Toggle sound">🔊</button>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    initQueuePage();
+  </script>
+</body>
+</html>

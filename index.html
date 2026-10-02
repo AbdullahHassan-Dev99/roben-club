@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RobEn Club — Interview Registration</title>
+  <meta name="description" content="Register for your RobEn Club interview — fill in your details and pick your time slot." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="register-page">
+
+  <!-- Floating particles -->
+  <div class="particles" id="particles"></div>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="logo-wrap">
+      <img src="logo.png" alt="RobEn Club Logo" class="logo-img" />
+      <div>
+        <span class="club-name">RobEn Club</span>
+        <span class="club-sub">Robotic Entrepreneur</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main card -->
+  <main class="register-main">
+    <div class="card glass-card register-card" id="registerCard">
+      <div class="card-glow"></div>
+
+      <div class="card-header-section">
+        <div class="step-badge">📋 Interview Registration</div>
+        <h1 class="card-title">Welcome to RobEn Club!</h1>
+        <p class="card-subtitle">Fill in your details, pick a time slot, and wait for your turn.</p>
+      </div>
+
+      <form id="registerForm" class="register-form" novalidate>
+
+        <!-- Name -->
+        <div class="form-group">
+          <label class="form-label" for="studentName">
+            <span class="label-icon">👤</span> Full Name
+          </label>
+          <input
+            type="text"
+            id="studentName"
+            class="form-input"
+            placeholder="Enter your full name..."
+            required
+            autocomplete="name"
+          />
+          <span class="field-error" id="nameError"></span>
+        </div>
+
+        <!-- University ID -->
+        <div class="form-group">
+          <label class="form-label" for="universityId">
+            <span class="label-icon">🎓</span> University ID
+          </label>
+          <input
+            type="text"
+            id="universityId"
+            class="form-input"
+            placeholder="e.g. 271008989"
+            required
+            inputmode="numeric"
+          />
+          <span class="field-error" id="idError"></span>
+        </div>
+
+        <!-- Phone -->
+        <div class="form-group">
+          <label class="form-label" for="phoneNumber">
+            <span class="label-icon">📱</span> Phone Number
+          </label>
+          <input
+            type="tel"
+            id="phoneNumber"
+            class="form-input"
+            placeholder="e.g. 01012345678"
+            required
+            inputmode="tel"
+          />
+          <span class="field-error" id="phoneError"></span>
+        </div>
+
+        <!-- Time Slot -->
+        <div class="form-group">
+          <label class="form-label">
+            <span class="label-icon">🕐</span> Interview Time Slot
+          </label>
+          <div class="slots-grid" id="slotsGrid">
+            <!-- Slots injected by JS -->
+          </div>
+          <span class="field-error" id="slotError"></span>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-submit" id="submitBtn">
+          <span class="btn-text">🚀 Add Me to the Queue</span>
+          <span class="btn-loader hidden">⏳</span>
+        </button>
+      </form>
+    </div>
+
+    <!-- Success card -->
+    <div class="card glass-card success-card hidden" id="successCard">
+      <div class="card-glow success-glow"></div>
+      <div class="success-icon">🎉</div>
+      <h2 class="success-title">You're Registered!</h2>
+      <p class="success-sub">You've been added to the interview queue.</p>
+      <div class="success-info" id="successInfo"></div>
+      <p class="success-wait">
+        ⏳ Stay nearby — you'll get a notification when it's your turn!
+      </p>
+      <a href="queue.html" class="btn btn-secondary">👀 View the Queue</a>
+    </div>
+  </main>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    initRegisterPage();
+  </script>
+</body>
+</html>

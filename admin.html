@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RobEn Club — Admin Panel</title>
+  <meta name="description" content="RobEn Club Interview Admin Control Panel" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="admin-page">
+
+  <div class="particles" id="particles"></div>
+
+  <!-- Login overlay -->
+  <div class="admin-login-overlay" id="loginOverlay">
+    <div class="card glass-card login-card">
+      <div class="card-glow"></div>
+      <img src="logo.png" alt="Logo" class="login-logo" />
+      <h2 class="login-title">Admin Panel</h2>
+      <p class="login-sub">RobEn Club — Interview Control</p>
+      <div class="form-group">
+        <input type="password" id="adminPassword" class="form-input" placeholder="Enter password..." />
+      </div>
+      <button class="btn btn-primary" id="loginBtn" onclick="adminLogin()">Login 🔐</button>
+      <p class="login-hint" id="loginError"></p>
+    </div>
+  </div>
+
+  <!-- Admin Dashboard -->
+  <div class="admin-dashboard hidden" id="adminDashboard">
+
+    <header class="site-header">
+      <div class="logo-wrap">
+        <img src="logo.png" alt="RobEn Club Logo" class="logo-img" />
+        <div>
+          <span class="club-name">RobEn Club</span>
+          <span class="club-sub">Admin Panel 🛡️</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-sm btn-danger" onclick="clearAll()">🗑️ Clear All</button>
+        <button class="btn btn-sm btn-ghost" onclick="adminLogout()">Logout</button>
+      </div>
+    </header>
+
+    <main class="admin-main">
+
+      <!-- Stats bar -->
+      <div class="stats-bar">
+        <div class="stat-card">
+          <div class="stat-num" id="statTotal">0</div>
+          <div class="stat-label">Total Registered</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num waiting" id="statWaiting">0</div>
+          <div class="stat-label">Waiting</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num done" id="statDone">0</div>
+          <div class="stat-label">Interviewed</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num absent" id="statAbsent">0</div>
+          <div class="stat-label">Absent</div>
+        </div>
+      </div>
+
+      <!-- Slots config -->
+      <section class="admin-section">
+        <div class="section-header">
+          <h2 class="section-title">⚙️ Time Slots</h2>
+          <button class="btn btn-sm btn-primary" onclick="showSlotModal()">➕ Add Slot</button>
+        </div>
+        <div class="slots-admin-list" id="slotsAdminList"></div>
+      </section>
+
+      <!-- QR Section -->
+      <section class="admin-section">
+        <div class="section-header">
+          <h2 class="section-title">📱 Registration QR Code</h2>
+        </div>
+
+        <!-- Website URL Bar -->
+        <div class="ip-override-bar">
+          <span class="ip-label">🌐 Registration Link / Public URL:</span>
+          <input type="text" id="ipOverrideInput" class="form-input ip-input"
+            placeholder="e.g. https://roben-club.netlify.app or your IP"
+            oninput="regenerateQR()" />
+          <span class="ip-hint">Paste your public website link here if opening locally, or host the site online.</span>
+        </div>
+
+        <div class="qr-container">
+          <div id="qrcode" class="qr-box"></div>
+          <div class="qr-info">
+            <p class="qr-url" id="qrUrl"></p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn btn-sm btn-secondary" onclick="copyRegisterLink()">📋 Copy Link</button>
+              <button class="btn btn-sm btn-ghost" onclick="regenerateQR()">🔄 Refresh QR</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Students table -->
+      <section class="admin-section">
+        <div class="section-header">
+          <h2 class="section-title">👥 Registered Students</h2>
+          <div class="filter-group">
+            <button class="filter-btn active" data-filter="all" onclick="filterStudents(this, 'all')">All</button>
+            <button class="filter-btn" data-filter="waiting" onclick="filterStudents(this, 'waiting')">Waiting</button>
+            <button class="filter-btn" data-filter="interviewing" onclick="filterStudents(this, 'interviewing')">Now</button>
+            <button class="filter-btn" data-filter="done" onclick="filterStudents(this, 'done')">Done</button>
+            <button class="filter-btn" data-filter="absent" onclick="filterStudents(this, 'absent')">Absent</button>
+          </div>
+        </div>
+        <div class="students-table-wrap">
+          <table class="students-table" id="studentsTable">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>University ID</th>
+                <th>Phone</th>
+                <th>Slot</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="studentsBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Slot Modal -->
+  <div class="modal-overlay hidden" id="slotModal">
+    <div class="modal-card">
+      <h3 class="modal-title">➕ Add New Time Slot</h3>
+      <div class="form-group">
+        <label class="form-label">Time</label>
+        <input type="time" id="newSlotTime" class="form-input" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Capacity (max students)</label>
+        <input type="number" id="newSlotCapacity" class="form-input" value="5" min="1" max="50" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="addSlot()">Add</button>
+        <button class="btn btn-ghost" onclick="closeSlotModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <!-- QR library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="app.js"></script>
+  <script>
+    initAdminPage();
+  </script>
+</body>
+</html>
