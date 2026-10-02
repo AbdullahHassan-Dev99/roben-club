@@ -231,7 +231,7 @@ function playPhoneRingtone() {
       ctx.resume().catch(() => {});
     }
 
-    const ringBurst = () => {
+    const alarmBurst = () => {
       try {
         const curCtx = getAudioContext();
         if (!curCtx) return;
@@ -240,37 +240,53 @@ function playPhoneRingtone() {
         }
         const now = curCtx.currentTime;
 
-        // Dual-tone chime (440Hz + 480Hz)
-        [440, 480].forEach(freq => {
+        // Classic Digital Alarm Clock Tone (4 rapid beeps: Beep-Beep-Beep-Beep)
+        const beeps = [0, 0.12, 0.24, 0.36];
+        beeps.forEach(offset => {
+          const t = now + offset;
           const osc = curCtx.createOscillator();
+          const osc2 = curCtx.createOscillator();
+          const filter = curCtx.createBiquadFilter();
           const gain = curCtx.createGain();
-          osc.connect(gain);
+
+          filter.type = 'lowpass';
+          filter.frequency.setValueAtTime(2600, t);
+
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(940, t); // Classic digital alarm frequency
+
+          osc2.type = 'sine';
+          osc2.frequency.setValueAtTime(1880, t); // Harmonic overtone
+
+          osc.connect(filter);
+          osc2.connect(filter);
+          filter.connect(gain);
           gain.connect(curCtx.destination);
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(freq, now);
 
-          gain.gain.setValueAtTime(0, now);
-          gain.gain.linearRampToValueAtTime(0.5, now + 0.08);
-          gain.gain.setValueAtTime(0.5, now + 1.5);
-          gain.gain.linearRampToValueAtTime(0, now + 1.65);
+          gain.gain.setValueAtTime(0, t);
+          gain.gain.linearRampToValueAtTime(0.4, t + 0.015);
+          gain.gain.setValueAtTime(0.4, t + 0.065);
+          gain.gain.linearRampToValueAtTime(0, t + 0.08);
 
-          osc.start(now);
-          osc.stop(now + 1.7);
+          osc.start(t);
+          osc2.start(t);
+          osc.stop(t + 0.085);
+          osc2.stop(t + 0.085);
         });
 
         if ('vibrate' in navigator) {
-          try { navigator.vibrate([1600, 1000]); } catch(e) {}
+          try { navigator.vibrate([100, 50, 100, 50, 100, 50, 100, 500]); } catch(e) {}
         }
       } catch(err) {
-        console.warn('Audio burst error:', err);
+        console.warn('Alarm audio burst error:', err);
       }
     };
 
-    ringBurst();
-    _ringInterval = setInterval(ringBurst, 2600);
+    alarmBurst();
+    _ringInterval = setInterval(alarmBurst, 1100);
     setTimeout(() => { stopRingSound(); }, 40000);
   } catch(e) {
-    console.warn('Audio ringtone error:', e);
+    console.warn('Alarm tone error:', e);
   }
 }
 
@@ -283,6 +299,14 @@ function stopRingSound() {
     try { navigator.vibrate(0); } catch(e) {}
   }
   document.getElementById('callRingModal')?.classList.add('hidden');
+}
+
+function testAlarmSound() {
+  unlockAudioOnInteraction();
+  playPhoneRingtone();
+  setTimeout(() => {
+    stopRingSound();
+  }, 3800); // Play 3 alarm cycles for test
 }
 
 function handleIncomingCall(call) {
