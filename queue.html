@@ -49,6 +49,14 @@
       </div>
     </section>
 
+    <!-- Quick lookup for students who closed browser or switched device -->
+    <div class="recover-bar" id="recoverBar">
+      <span style="font-size:1.1rem;">🔎</span>
+      <span style="font-size:.85rem;color:var(--text-secondary);flex:1 1 200px;">قفلت المتصفح أو دخلت من جهاز تاني؟ استرجع دورك ورنتك برقمك الجامعي:</span>
+      <input type="text" id="recoverIdInput" class="recover-bar-input" placeholder="الرقم الجامعي..." inputmode="numeric" />
+      <button class="btn btn-sm btn-primary" onclick="recoverMyQueue()">استرجاع دوري</button>
+    </div>
+
     <!-- Currently being interviewed -->
     <section class="now-section" id="nowSection">
       <div class="now-label">🎤 Currently Being Interviewed</div>

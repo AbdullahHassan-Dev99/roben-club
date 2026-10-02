@@ -362,12 +362,75 @@ function initRegisterPage() {
 
   // Load slots then render
   listenSlots(() => renderSlots());
-  listenStudents(() => updateIndexAheadCard());
+  listenStudents(() => {
+    updateIndexAheadCard();
+    checkAlreadyRegistered();
+  });
   listenCurrent(() => updateIndexAheadCard());
   listenCallAlert(handleIncomingCall);
 
   const form = document.getElementById('registerForm');
   if (form) form.addEventListener('submit', handleRegisterSubmit);
+
+  const uIdInput = document.getElementById('universityId');
+  if (uIdInput) {
+    uIdInput.addEventListener('input', () => {
+      const val = uIdInput.value.trim();
+      if (val.length >= 4) {
+        const found = _students.find(s => s.universityId === val);
+        if (found) {
+          const nameInput = document.getElementById('studentName');
+          const phoneInput = document.getElementById('phoneNumber');
+          if (nameInput && !nameInput.value) nameInput.value = found.name;
+          if (phoneInput && !phoneInput.value) phoneInput.value = found.phone;
+
+          const banner = document.getElementById('alreadyRegisteredBanner');
+          const textEl = document.getElementById('alreadyRegisteredText');
+          if (banner && textEl) {
+            banner.classList.remove('hidden');
+            const slot = getSlotById(found.slotId);
+            const slotTime = slot ? ` (موعدك السابق: ${slot.time})` : '';
+            if (found.status === 'absent' || found.status === 'done') {
+              textEl.innerHTML = `👋 أهلاً بك يا <strong>${escHtml(found.name)}</strong>! حالة تسجيلك السابقة: <strong>${statusLabel(found.status).text}</strong>.<br>✨ يمكنك الآن اختيار موعد جديد بالأسفل والضغط على زر التسجيل لحجز موعد جديد والدخول للطابور مرة أخرى!`;
+            } else {
+              textEl.innerHTML = `👋 مرحباً <strong>${escHtml(found.name)}</strong>! أنت مسجل بالفعل${slotTime}. يمكنك تعديل موعدك باختيار موعد جديد أو الضغط على "عرض دورك في الطابور".`;
+            }
+          }
+        }
+      }
+    });
+  }
+}
+
+function checkAlreadyRegistered() {
+  const myId = getMyStudentId();
+  if (!myId) return;
+  const existing = _students.find(s => s.id === myId);
+  const banner = document.getElementById('alreadyRegisteredBanner');
+  const textEl = document.getElementById('alreadyRegisteredText');
+  if (!banner || !existing) return;
+
+  const slot = getSlotById(existing.slotId);
+  banner.classList.remove('hidden');
+  const slotTime = slot ? ` (موعدك: ${slot.time})` : '';
+  if (existing.status === 'absent' || existing.status === 'done') {
+    textEl.innerHTML = `👋 مرحباً <strong>${escHtml(existing.name)}</strong>! انتهت مقابلتك أو عدي وقتك (الحالة: <strong>${statusLabel(existing.status).text}</strong>).<br>✨ يمكنك الآن اختيار موعد جديد بالأسفل والضغط على الزر لإعادة التسجيل ودخول الطابور مجدداً!`;
+  } else {
+    textEl.innerHTML = `👋 مرحباً <strong>${escHtml(existing.name)}</strong>! أنت مسجل بالفعل${slotTime}. حالتك الآن: <strong>${statusLabel(existing.status).text}</strong>.`;
+  }
+
+  // Pre-fill inputs for convenience
+  const nameInput = document.getElementById('studentName');
+  const idInput = document.getElementById('universityId');
+  const phoneInput = document.getElementById('phoneNumber');
+  if (nameInput && !nameInput.value) nameInput.value = existing.name;
+  if (idInput && !idInput.value) idInput.value = existing.universityId;
+  if (phoneInput && !phoneInput.value) phoneInput.value = existing.phone;
+}
+
+function resetFormForNewSlot() {
+  document.getElementById('alreadyRegisteredBanner')?.classList.add('hidden');
+  document.getElementById('registerForm')?.scrollIntoView({ behavior: 'smooth' });
 }
 
 function updateIndexAheadCard() {
@@ -395,7 +458,7 @@ function updateIndexAheadCard() {
     titleEl.textContent = 'تمت مقابلتك بنجاح!';
   } else if (myStudent.status === 'absent') {
     countEl.textContent = '!';
-    titleEl.textContent = 'تم تسجيلك كغائب';
+    titleEl.textContent = 'تم تسجيلك كغائب — يمكنك حجز موعد جديد بالأسفل';
   }
 }
 
@@ -463,12 +526,54 @@ async function handleRegisterSubmit(e) {
   const btn = document.getElementById('submitBtn');
   if (btn) btn.disabled = true;
 
-  // Check duplicate university ID
   const uId = document.getElementById('universityId').value.trim();
-  if (_students.find(s => s.universityId === uId)) {
-    showError('idError', 'This University ID is already registered!');
-    if (btn) btn.disabled = false;
-    return;
+  const existing = _students.find(s => s.universityId === uId);
+
+  // If already registered: allow re-registration or slot change!
+  if (existing) {
+    if (existing.status === 'absent' || existing.status === 'done') {
+      const confirmReRegister = confirm(`أهلاً بك يا ${existing.name}!\n\nانتهت مقابلتك السابقة أو تم تسجيلك كغائب.\nهل تريد حجز الموعد الجديد والدخول لقائمة الانتظار مجدداً؟`);
+      if (confirmReRegister) {
+        existing.slotId = selectedSlotId;
+        existing.status = 'waiting';
+        existing.registeredAt = new Date().toISOString();
+        existing.callCount = 0;
+        existing.phone = document.getElementById('phoneNumber').value.trim() || existing.phone;
+        existing.name = document.getElementById('studentName').value.trim() || existing.name;
+        await updateStudent(existing);
+        localStorage.setItem('myStudentId', existing.id);
+        localStorage.setItem('myStudentName', existing.name);
+        sessionStorage.setItem('myStudentId', existing.id);
+        showSuccessCard(existing);
+        updateIndexAheadCard();
+        alert('✅ تم حجز موعدك الجديد بنجاح وإعادتك لقائمة الانتظار!');
+        return;
+      } else {
+        if (btn) btn.disabled = false;
+        return;
+      }
+    } else {
+      // Student is currently waiting or interviewing
+      const confirmChangeSlot = confirm(`أهلاً بك يا ${existing.name}!\n\nأنت مسجل بالفعل في الطابور.\n- اضغط OK لتحديث موعدك إلى الموعد الجديد.\n- أو اضغط Cancel للانتقال مباشرة لشاشة معرفة دورك.`);
+      if (confirmChangeSlot) {
+        existing.slotId = selectedSlotId;
+        existing.phone = document.getElementById('phoneNumber').value.trim() || existing.phone;
+        existing.name = document.getElementById('studentName').value.trim() || existing.name;
+        await updateStudent(existing);
+        localStorage.setItem('myStudentId', existing.id);
+        localStorage.setItem('myStudentName', existing.name);
+        sessionStorage.setItem('myStudentId', existing.id);
+        showSuccessCard(existing);
+        updateIndexAheadCard();
+        alert('✅ تم تحديث موعدك بنجاح!');
+        return;
+      } else {
+        localStorage.setItem('myStudentId', existing.id);
+        localStorage.setItem('myStudentName', existing.name);
+        window.location.href = 'queue.html';
+        return;
+      }
+    }
   }
 
   const student = {
@@ -479,6 +584,7 @@ async function handleRegisterSubmit(e) {
     slotId:       selectedSlotId,
     status:       'waiting',
     registeredAt: new Date().toISOString(),
+    callCount:    0,
   };
 
   try {
@@ -581,6 +687,16 @@ function initQueuePage() {
     document.getElementById('notifBanner')?.classList.add('hidden');
   });
 
+  const recoverInput = document.getElementById('recoverIdInput');
+  if (recoverInput) {
+    recoverInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        recoverMyQueue();
+      }
+    });
+  }
+
   // Real-time listeners
   listenSlots(() => renderQueue());
   listenStudents(() => renderQueue());
@@ -589,6 +705,32 @@ function initQueuePage() {
     renderQueue();
   });
   listenCallAlert(handleIncomingCall);
+}
+
+function recoverMyQueue() {
+  const input = document.getElementById('recoverIdInput');
+  const raw = input ? input.value.trim() : '';
+  if (!raw) {
+    alert('من فضلك أدخل الرقم الجامعي أو رقم الموبايل.');
+    return;
+  }
+  const found = _students.find(s => 
+    s.universityId === raw || 
+    s.phone === raw || 
+    s.universityId.toLowerCase() === raw.toLowerCase()
+  );
+  if (found) {
+    localStorage.setItem('myStudentId', found.id);
+    localStorage.setItem('myStudentName', found.name);
+    sessionStorage.setItem('myStudentId', found.id);
+    myStudentId = found.id;
+    unlockAudioOnInteraction();
+    renderQueue();
+    alert(`✅ أهلاً بك يا ${found.name}!\nتم استرجاع دورك وتفعيل رنة الموبايل بنجاح!`);
+    document.getElementById('myStatusSection')?.scrollIntoView({ behavior: 'smooth' });
+  } else {
+    alert('❌ لم يتم العثور على طالب مسجل بهذا الرقم.\nتأكد من كتابة الرقم الجامعي بشكل صحيح، أو اضغط "New Registration" للتسجيل من جديد.');
+  }
 }
 
 function updateSoundToggle() {
@@ -647,10 +789,10 @@ function renderQueue() {
         if (subEl) subEl.textContent = 'نتمنى لك التوفيق في RobEn Club!';
         if (boxEl) boxEl.className = 'my-status-box';
       } else if (myStudent.status === 'absent') {
-        if (tagEl) tagEl.textContent = '❌ غائب';
+        if (tagEl) tagEl.textContent = '❌ غائب / عدي وقتك';
         if (countEl) countEl.textContent = '!';
-        if (titleEl) titleEl.textContent = 'تم تسجيلك كغائب';
-        if (subEl) subEl.textContent = 'يرجى مراجعة إدارة اللجنة.';
+        if (titleEl) titleEl.textContent = 'انتهى وقت مقابلتك أو تم تسجيلك كغائب';
+        if (subEl) subEl.innerHTML = `لا تقلق، يمكنك حجز موعد جديد والدخول للطابور مجدداً:<br><a href="index.html" class="btn btn-sm btn-primary" style="margin-top:10px;display:inline-block;">🔄 اضغط هنا لاختيار موعد جديد</a>`;
         if (boxEl) boxEl.className = 'my-status-box';
       }
     } else {

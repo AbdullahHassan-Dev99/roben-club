@@ -37,6 +37,17 @@
         <p class="card-subtitle">Fill in your details, pick a time slot, and wait for your turn.</p>
       </div>
 
+      <!-- Quick Returning Student Banner -->
+      <div class="already-banner hidden" id="alreadyRegisteredBanner">
+        <div class="already-banner-text" id="alreadyRegisteredText">
+          👋 مرحباً بك! لقد سجلت بالفعل في المقابلات.
+        </div>
+        <div class="already-banner-actions">
+          <a href="queue.html" class="btn btn-sm btn-primary">👀 عرض دورك في الطابور</a>
+          <button type="button" class="btn btn-sm btn-ghost" onclick="resetFormForNewSlot()">🔄 حجز موعد جديد / تعديل</button>
+        </div>
+      </div>
+
       <form id="registerForm" class="register-form" novalidate>
 
         <!-- Name -->
