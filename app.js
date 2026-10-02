@@ -48,6 +48,7 @@ const PATHS = {
   STUDENTS: 'roben/students',
   SLOTS:    'roben/slots',
   CURRENT:  'roben/current',
+  CALL:     'roben/call',
 };
 
 // ─── Default time slots ───────────────────────────────────────
@@ -96,6 +97,14 @@ function listenCurrent(callback) {
   db.ref(PATHS.CURRENT).on('value', snap => {
     _currentId = snap.val() || null;
     callback(_currentId);
+  });
+}
+
+function listenCallAlert(callback) {
+  if (!db) return;
+  db.ref(PATHS.CALL).on('value', snap => {
+    const val = snap.val();
+    if (val) callback(val);
   });
 }
 
@@ -193,6 +202,132 @@ function playNotificationSound() {
   } catch(e) {}
 }
 
+// ─── Loud Phone Ringtone & Vibration ──────────────────────────
+let _ringInterval = null;
+let _ringAudioCtx = null;
+let _lastHandledCallNonce = null;
+
+function getMyStudentId() {
+  return localStorage.getItem('myStudentId') || sessionStorage.getItem('myStudentId');
+}
+
+function playPhoneRingtone() {
+  stopRingSound();
+  try {
+    const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtxClass) return;
+    _ringAudioCtx = new AudioCtxClass();
+
+    const ringBurst = () => {
+      if (!_ringAudioCtx) return;
+      if (_ringAudioCtx.state === 'suspended') {
+        _ringAudioCtx.resume().catch(() => {});
+      }
+      const now = _ringAudioCtx.currentTime;
+
+      // Realistic dual-tone telephone bell ring (440Hz + 480Hz)
+      [440, 480].forEach(freq => {
+        const osc = _ringAudioCtx.createOscillator();
+        const gain = _ringAudioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(_ringAudioCtx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now);
+
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.45, now + 0.06);
+        gain.gain.setValueAtTime(0.45, now + 1.6);
+        gain.gain.linearRampToValueAtTime(0, now + 1.7);
+
+        osc.start(now);
+        osc.stop(now + 1.75);
+      });
+
+      // Mobile phone vibration (repeating ring pattern)
+      if ('vibrate' in navigator) {
+        navigator.vibrate([1600, 1000]);
+      }
+    };
+
+    ringBurst();
+    _ringInterval = setInterval(ringBurst, 2800);
+    // Auto-stop after 40 seconds if unacknowledged
+    setTimeout(() => { stopRingSound(); }, 40000);
+  } catch(e) {
+    console.warn('Audio ringtone error:', e);
+  }
+}
+
+function stopRingSound() {
+  if (_ringInterval) {
+    clearInterval(_ringInterval);
+    _ringInterval = null;
+  }
+  if (_ringAudioCtx) {
+    try { _ringAudioCtx.close(); } catch(e) {}
+    _ringAudioCtx = null;
+  }
+  if ('vibrate' in navigator) {
+    navigator.vibrate(0);
+  }
+  document.getElementById('callRingModal')?.classList.add('hidden');
+}
+
+function handleIncomingCall(call) {
+  if (!call || !call.studentId) return;
+  const myId = getMyStudentId();
+  if (myId !== call.studentId) return;
+
+  // Don't trigger if this exact call nonce was already processed
+  if (call.nonce && call.nonce === _lastHandledCallNonce) return;
+  // Ignore calls older than 3 minutes
+  if (call.timestamp && Date.now() - call.timestamp > 180000) return;
+  _lastHandledCallNonce = call.nonce;
+
+  // Show ringing modal on student's screen
+  const modal = document.getElementById('callRingModal');
+  const desc = document.getElementById('callModalDesc');
+  if (desc) {
+    const studentName = call.studentName || localStorage.getItem('myStudentName') || 'عزيزي الطالب';
+    desc.textContent = `${studentName} — لجنة المقابلات تناديك الآن، يرجى التوجه للغرفة فوراً!`;
+  }
+  if (modal) {
+    modal.classList.remove('hidden');
+  }
+
+  // Play loud repeating phone ringtone and vibrate mobile!
+  playPhoneRingtone();
+
+  // Send system push notification
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification('🚨 نداء عاجل: دورك الآن في المقابلة!', {
+      body: `${call.studentName || ''} — يرجى التوجه إلى لجنة المقابلات فوراً!`,
+      icon: 'logo.png',
+      requireInteraction: true,
+      vibrate: [1000, 500, 1000, 500, 1000]
+    });
+  }
+}
+
+// Unlock audio on mobile first touch/click
+function unlockAudioOnInteraction() {
+  const unlock = () => {
+    try {
+      const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtxClass) {
+        const dummyCtx = new AudioCtxClass();
+        dummyCtx.resume().then(() => {
+          dummyCtx.close();
+        });
+      }
+    } catch(e) {}
+    document.removeEventListener('click', unlock);
+    document.removeEventListener('touchstart', unlock);
+  };
+  document.addEventListener('click', unlock, { once: true });
+  document.addEventListener('touchstart', unlock, { once: true });
+}
+
 // ─── Particles ────────────────────────────────────────────────
 function initParticles() {
   const container = document.getElementById('particles');
@@ -218,6 +353,7 @@ function initParticles() {
 // =========================================
 function initRegisterPage() {
   initParticles();
+  unlockAudioOnInteraction();
 
   if (!initFirebase()) {
     showFirebaseError();
@@ -226,9 +362,41 @@ function initRegisterPage() {
 
   // Load slots then render
   listenSlots(() => renderSlots());
+  listenStudents(() => updateIndexAheadCard());
+  listenCurrent(() => updateIndexAheadCard());
+  listenCallAlert(handleIncomingCall);
 
   const form = document.getElementById('registerForm');
   if (form) form.addEventListener('submit', handleRegisterSubmit);
+}
+
+function updateIndexAheadCard() {
+  const myId = getMyStudentId();
+  if (!myId) return;
+  const myStudent = _students.find(s => s.id === myId);
+  if (!myStudent) return;
+  const countEl = document.getElementById('indexAheadCount');
+  const titleEl = document.getElementById('indexAheadTitle');
+  if (!countEl || !titleEl) return;
+
+  if (myStudent.status === 'interviewing') {
+    countEl.textContent = '0';
+    titleEl.textContent = '🚨 دورك الآن في المقابلة! يرجى الدخول فوراً.';
+  } else if (myStudent.status === 'waiting') {
+    const waitingList = _students
+      .filter(s => s.status === 'waiting')
+      .sort((a,b) => new Date(a.registeredAt) - new Date(b.registeredAt));
+    const myIndex = waitingList.findIndex(s => s.id === myId);
+    const ahead = myIndex >= 0 ? myIndex : 0;
+    countEl.textContent = ahead;
+    titleEl.textContent = ahead === 0 ? 'أنت التالي مباشرة! استعد.' : `فاضلك ${ahead} أشخاص قبلك`;
+  } else if (myStudent.status === 'done') {
+    countEl.textContent = '✓';
+    titleEl.textContent = 'تمت مقابلتك بنجاح!';
+  } else if (myStudent.status === 'absent') {
+    countEl.textContent = '!';
+    titleEl.textContent = 'تم تسجيلك كغائب';
+  }
 }
 
 function showFirebaseError() {
@@ -315,6 +483,8 @@ async function handleRegisterSubmit(e) {
 
   try {
     await addStudent(student);
+    localStorage.setItem('myStudentId', student.id);
+    localStorage.setItem('myStudentName', student.name);
     sessionStorage.setItem('myStudentId', student.id);
 
     // Request notification permission
@@ -323,6 +493,7 @@ async function handleRegisterSubmit(e) {
     }
 
     showSuccessCard(student);
+    updateIndexAheadCard();
   } catch(err) {
     alert('❌ Error saving data. Check internet connection.');
     console.error(err);
@@ -379,7 +550,8 @@ let soundMuted    = false;
 
 function initQueuePage() {
   initParticles();
-  myStudentId = sessionStorage.getItem('myStudentId');
+  unlockAudioOnInteraction();
+  myStudentId = getMyStudentId();
   soundMuted  = !isSoundOn();
   updateSoundToggle();
 
@@ -413,12 +585,10 @@ function initQueuePage() {
   listenSlots(() => renderQueue());
   listenStudents(() => renderQueue());
   listenCurrent(newId => {
-    if (myStudentId && newId !== prevCurrentId && newId === myStudentId) {
-      triggerMyTurnAlert(_students.find(s => s.id === myStudentId));
-    }
     prevCurrentId = newId;
     renderQueue();
   });
+  listenCallAlert(handleIncomingCall);
 }
 
 function updateSoundToggle() {
@@ -429,7 +599,66 @@ function updateSoundToggle() {
 }
 
 function renderQueue() {
-  // Now card
+  const myId = getMyStudentId();
+  const myStudent = _students.find(s => s.id === myId);
+
+  // 1. Personalized Student Box (#myStatusSection) — "فاضلك العدد دا"
+  const myStatusSection = document.getElementById('myStatusSection');
+  if (myStatusSection) {
+    if (myStudent) {
+      myStatusSection.classList.remove('hidden');
+      const nameEl  = document.getElementById('myStatusName');
+      const tagEl   = document.getElementById('myStatusTag');
+      const countEl = document.getElementById('aheadCount');
+      const titleEl = document.getElementById('aheadTitle');
+      const subEl   = document.getElementById('aheadSub');
+      const boxEl   = document.getElementById('myStatusBox');
+
+      if (nameEl) nameEl.textContent = `مرحباً بك: ${myStudent.name}`;
+
+      if (myStudent.status === 'interviewing') {
+        if (tagEl) tagEl.textContent = '🎤 دورك الآن!';
+        if (countEl) countEl.textContent = '0';
+        if (titleEl) titleEl.textContent = '🚨 دورك الآن في المقابلة!';
+        if (subEl) subEl.textContent = 'يرجى التوجه إلى لجنة المقابلات فوراً.';
+        if (boxEl) boxEl.className = 'my-status-box my-turn-now-box';
+      } else if (myStudent.status === 'waiting') {
+        // Calculate how many waiting students are before me
+        const waitingList = _students
+          .filter(s => s.status === 'waiting')
+          .sort((a,b) => new Date(a.registeredAt) - new Date(b.registeredAt));
+        
+        const myIndex = waitingList.findIndex(s => s.id === myId);
+        const aheadCount = myIndex >= 0 ? myIndex : 0;
+
+        if (tagEl) tagEl.textContent = '⏳ في قائمة الانتظار';
+        if (countEl) countEl.textContent = aheadCount;
+        if (titleEl) {
+          titleEl.textContent = aheadCount === 0 
+            ? 'أنت التالي مباشرة! استعد للمقابلة.' 
+            : `فاضلك ${aheadCount} ${aheadCount === 1 ? 'شخص فقط' : (aheadCount <= 10 ? 'أشخاص' : 'شخص')} قبلك في الطابور`;
+        }
+        if (subEl) subEl.textContent = 'خليك قريب، الموبايل هيرن ويهتز بصوت عالي أول ما الأدمن يستدعيك!';
+        if (boxEl) boxEl.className = 'my-status-box';
+      } else if (myStudent.status === 'done') {
+        if (tagEl) tagEl.textContent = '✅ تمت المقابلة';
+        if (countEl) countEl.textContent = '✓';
+        if (titleEl) titleEl.textContent = 'تمت مقابلتك بنجاح!';
+        if (subEl) subEl.textContent = 'نتمنى لك التوفيق في RobEn Club!';
+        if (boxEl) boxEl.className = 'my-status-box';
+      } else if (myStudent.status === 'absent') {
+        if (tagEl) tagEl.textContent = '❌ غائب';
+        if (countEl) countEl.textContent = '!';
+        if (titleEl) titleEl.textContent = 'تم تسجيلك كغائب';
+        if (subEl) subEl.textContent = 'يرجى مراجعة إدارة اللجنة.';
+        if (boxEl) boxEl.className = 'my-status-box';
+      }
+    } else {
+      myStatusSection.classList.add('hidden');
+    }
+  }
+
+  // 2. Currently being interviewed card
   const currentStudent = _students.find(s => s.id === _currentId);
   const nowNameEl   = document.getElementById('nowName');
   const nowSlotEl   = document.getElementById('nowSlot');
@@ -437,38 +666,45 @@ function renderQueue() {
   const nowCard     = document.getElementById('nowCard');
 
   if (currentStudent) {
+    const isMe = currentStudent.id === myId;
     const slot = getSlotById(currentStudent.slotId);
-    nowNameEl.textContent   = currentStudent.name;
+    nowNameEl.textContent   = isMe ? `${currentStudent.name} (👉 أنت)` : 'طالب قيد المقابلة الآن 🎤';
     nowSlotEl.textContent   = slot ? `⏰ ${slot.time}` : '';
-    nowAvatarEl.textContent = getInitials(currentStudent.name);
+    nowAvatarEl.textContent = isMe ? getInitials(currentStudent.name) : '🎤';
     if (nowCard) nowCard.style.borderColor = 'rgba(245,197,24,0.5)';
   } else {
-    nowNameEl.textContent   = 'No one currently';
+    nowNameEl.textContent   = 'لا أحد حالياً';
     nowSlotEl.textContent   = '';
     nowAvatarEl.textContent = '—';
     if (nowCard) nowCard.style.borderColor = '';
   }
 
-  // Next banner
+  // 3. Next banner (Private)
   const waitingList   = _students.filter(s => s.status === 'waiting');
   const nextBanner    = document.getElementById('nextBanner');
   const nextBannerTxt = document.getElementById('nextBannerText');
   if (waitingList.length > 0 && currentStudent) {
     const nextUp = waitingList.sort((a,b) => new Date(a.registeredAt)-new Date(b.registeredAt))[0];
-    if (nextBannerTxt) nextBannerTxt.textContent = `Up Next: ${nextUp.name} — ${getSlotById(nextUp.slotId)?.time || ''}`;
+    if (nextBannerTxt) {
+      if (nextUp.id === myId) {
+        nextBannerTxt.textContent = `🔔 دورك القادم مباشرة! استعد للدخول للمقابلة.`;
+      } else {
+        nextBannerTxt.textContent = `🔔 جاري تجهيز الطالب التالي للمقابلة...`;
+      }
+    }
     nextBanner?.classList.remove('hidden');
   } else {
     nextBanner?.classList.add('hidden');
   }
 
-  // Queue list
+  // 4. Queue list with 100% PRIVACY (No other student names exposed!)
   const listEl = document.getElementById('queueList');
   if (!listEl) return;
 
   const sorted = [..._students].sort((a,b) => new Date(a.registeredAt)-new Date(b.registeredAt));
 
   if (sorted.length === 0) {
-    listEl.innerHTML = `<div class="empty-state"><div class="empty-icon">🕐</div><p>No students in the queue yet.</p></div>`;
+    listEl.innerHTML = `<div class="empty-state"><div class="empty-icon">🕐</div><p>لا يوجد طلاب في الطابور حالياً.</p></div>`;
     updateQueueStats();
     return;
   }
@@ -477,21 +713,28 @@ function renderQueue() {
   sorted.forEach((student, idx) => {
     const slot  = getSlotById(student.slotId);
     const sl    = statusLabel(student.status);
-    const isMe  = student.id === myStudentId;
-    const isCur = student.id === _currentId;
+    const isMe  = student.id === myId;
 
     const item = document.createElement('div');
     item.className = `queue-item item-${student.status}`;
-    if (isMe) item.style.cssText = 'border-color:rgba(245,197,24,0.6);background:rgba(245,197,24,0.06);';
+    if (isMe) {
+      item.style.cssText = 'border-color:rgba(245,197,24,0.7);background:rgba(245,197,24,0.08);box-shadow:0 0 15px rgba(245,197,24,0.15);';
+    }
+
+    // Privacy Protection: Obfuscate everyone else's name!
+    const displayName = isMe
+      ? `${escHtml(student.name)} <span style="color:var(--gold);font-weight:800;font-size:.85rem;">(👉 أنت / You)</span>`
+      : (student.status === 'interviewing' ? 'طالب قيد المقابلة الآن 🎤' : `طالب رقم ${idx + 1}`);
+
+    const displayAvatar = isMe ? getInitials(student.name) : `#${idx + 1}`;
 
     item.innerHTML = `
       <div class="item-rank">${idx + 1}</div>
-      <div class="item-avatar">${getInitials(student.name)}</div>
+      <div class="item-avatar" style="${isMe ? 'background:linear-gradient(135deg,var(--gold),#f39c12);color:var(--navy);' : ''}">${displayAvatar}</div>
       <div class="item-info">
-        <div class="item-name">${escHtml(student.name)}${isMe ? ' <span style="color:var(--gold);font-size:.75rem;">← You</span>' : ''}</div>
-        <div class="item-meta">${escHtml(student.universityId)}</div>
+        <div class="item-name">${displayName}</div>
+        <div class="item-meta">${slot ? ('⏰ ' + slot.time) : ''}</div>
       </div>
-      <div class="item-slot-badge">${slot ? slot.time : '—'}</div>
       <div class="item-status ${sl.cls}">${sl.text}</div>
     `;
     listEl.appendChild(item);
@@ -727,14 +970,18 @@ function renderStudentsTable() {
 
 function buildActionButtons(student, isCurrent) {
   const btns = [];
-  if (student.status === 'waiting' && !isCurrent)
-    btns.push(`<button class="action-btn btn-call" onclick="callStudent('${student.id}')">📣 Call</button>`);
+  if (student.status === 'waiting' && !isCurrent) {
+    btns.push(`<button class="action-btn btn-call" onclick="callStudent('${student.id}')">📣 Call & Ring</button>`);
+  }
   if (isCurrent) {
+    const ringTimes = student.callCount || 1;
+    btns.push(`<button class="action-btn btn-ring-again" onclick="callStudent('${student.id}')" title="أرسل رنة قوية لموبايل الطالب مرة أخرى">🔔 Ring Again (${ringTimes})</button>`);
     btns.push(`<button class="action-btn btn-done"   onclick="markDone('${student.id}')">✅ Done</button>`);
     btns.push(`<button class="action-btn btn-absent" onclick="markAbsent('${student.id}')">❌ Absent</button>`);
   }
-  if (student.status === 'done' || student.status === 'absent')
+  if (student.status === 'done' || student.status === 'absent') {
     btns.push(`<button class="action-btn btn-reset" onclick="resetStudent('${student.id}')">🔄 Reset</button>`);
+  }
   btns.push(`<button class="action-btn btn-remove" onclick="removeStudent('${student.id}')">🗑️</button>`);
   return btns.join('');
 }
@@ -743,8 +990,27 @@ function buildActionButtons(student, isCurrent) {
 async function callStudent(id) {
   const student = _students.find(s => s.id === id);
   if (!student) return;
-  await updateStudent({ ...student, status: 'interviewing' });
+
+  const currentCount = student.callCount || 0;
+  const updatedStudent = {
+    ...student,
+    status: 'interviewing',
+    callCount: currentCount + 1,
+    lastCalledAt: Date.now()
+  };
+
+  await updateStudent(updatedStudent);
   await setCurrentId(id);
+
+  // Send Call signal to Firebase with unique nonce to trigger mobile ring every single time ("واكتر من مرا")!
+  await db.ref(PATHS.CALL).set({
+    studentId: id,
+    studentName: student.name,
+    timestamp: Date.now(),
+    callCount: currentCount + 1,
+    nonce: Math.random().toString(36).slice(2)
+  });
+
   playNotificationSound();
 }
 

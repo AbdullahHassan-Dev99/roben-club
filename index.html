@@ -111,13 +111,40 @@
       <div class="success-icon">🎉</div>
       <h2 class="success-title">You're Registered!</h2>
       <p class="success-sub">You've been added to the interview queue.</p>
+      
+      <!-- Ahead of you counter -->
+      <div class="ahead-card" id="indexAheadCard" style="margin-bottom:20px;text-align:left;">
+        <div class="ahead-number-wrap">
+          <span class="ahead-number" id="indexAheadCount">...</span>
+          <span class="ahead-number-label">Ahead of you</span>
+        </div>
+        <div class="ahead-info">
+          <div class="ahead-title" id="indexAheadTitle">جاري حساب دورك...</div>
+          <div class="ahead-sub">خليك في الصفحة، الموبايل هيرن بصوت عالي أول ما الأدمن يناديك!</div>
+        </div>
+      </div>
+
       <div class="success-info" id="successInfo"></div>
       <p class="success-wait">
-        ⏳ Stay nearby — you'll get a notification when it's your turn!
+        🔔 لا تغلق الصفحة — الموبايل هيرن ويهتز فور استدعائك!
       </p>
       <a href="queue.html" class="btn btn-secondary">👀 View the Queue</a>
     </div>
   </main>
+
+  <!-- Full Screen Incoming Call / Ring Modal -->
+  <div class="call-modal-overlay hidden" id="callRingModal">
+    <div class="call-modal-card">
+      <div class="call-ring-icon">📲</div>
+      <div class="call-title">🚨 نداء عاجل: <span>دورك الآن!</span> 🚨</div>
+      <p class="call-desc" id="callModalDesc">
+        يرجى التوجه إلى لجنة المقابلات فوراً!
+      </p>
+      <button class="btn-ack-call" id="ackCallBtn" onclick="stopRingSound()">
+        ✅ أنا قادم (إيقاف الرنة)
+      </button>
+    </div>
+  </div>
 
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
