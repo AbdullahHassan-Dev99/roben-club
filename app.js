@@ -633,20 +633,6 @@ async function deleteSlot(slotId) {
 const OFFICIAL_REGISTER_URL = 'https://abdullahhassan-dev99.github.io/roben-club/index.html';
 
 function getRegisterUrl() {
-  const ipInput = document.getElementById('ipOverrideInput');
-  let val = ipInput ? ipInput.value.trim() : '';
-
-  if (val && (val.startsWith('http://') || val.startsWith('https://'))) {
-    return val;
-  }
-
-  const loc = window.location;
-  if (loc.protocol === 'http:' || loc.protocol === 'https:') {
-    const basePath = loc.pathname.substring(0, loc.pathname.lastIndexOf('/') + 1) || '/';
-    const origin = loc.origin || (loc.protocol + '//' + loc.host);
-    return `${origin}${basePath}index.html`;
-  }
-
   return OFFICIAL_REGISTER_URL;
 }
 
@@ -655,18 +641,15 @@ function generateQRCode() {
   const qrUrlEl = document.getElementById('qrUrl');
   if (!qrBox) return;
 
-  const url = getRegisterUrl();
-  if (qrUrlEl) qrUrlEl.textContent = url;
-
-  const ipInput = document.getElementById('ipOverrideInput');
-  if (ipInput && !ipInput.value) {
-    ipInput.value = url;
+  const url = OFFICIAL_REGISTER_URL;
+  if (qrUrlEl) {
+    qrUrlEl.innerHTML = `<a href="${url}" target="_blank" style="color:var(--primary);text-decoration:underline;word-break:break-all;">${url}</a>`;
   }
 
   qrBox.innerHTML = '';
   try {
     new QRCode(qrBox, {
-      text: url, width: 180, height: 180,
+      text: url, width: 200, height: 200,
       colorDark: '#0d1b2a', colorLight: '#ffffff',
       correctLevel: QRCode.CorrectLevel.H,
     });
